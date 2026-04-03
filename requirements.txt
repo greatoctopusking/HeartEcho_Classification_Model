@@ -1,0 +1,26 @@
+# 心脏超声切面分类模型依赖
+
+# 核心依赖
+torch>=1.8.0
+torchvision>=0.9.0
+
+# 数据处理
+Pillow>=8.0.0
+numpy>=1.19.0
+scikit-learn>=0.24.0
+
+# NIfTI医学图像处理
+nibabel>=3.2.0
+
+# 可视化
+matplotlib>=3.3.0
+seaborn>=0.11.0
+
+# 配置
+PyYAML>=5.4.0
+
+# 进度条
+tqdm>=4.60.0
+
+# 可选: TensorBoard (用于记录训练过程)
+# tensorboard>=2.4.0

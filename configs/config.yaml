@@ -1,0 +1,54 @@
+# 心脏超声切面分类模型配置文件
+
+# 数据配置
+data:
+  cactus_root: "CACTUS/Images Dataset"  # CACTUS数据集路径
+  camus_root: "CAMUS"                    # CAMUS数据集路径 (可选)
+  val_split: 0.15                       # 验证集比例
+  test_split: 0.15                      # 测试集比例
+  num_workers: 4                        # 数据加载线程数
+  image_size: 224                       # 输入图像尺寸
+
+# 模型配置
+model:
+  backbone: "usfmae"                     # 骨干网络类型
+  pretrained_path: "USF-MAE pretrained/USF-MAE_full_pretrain_43dataset_100epochs.pt"  # 预训练权重路径
+  num_classes: 7                        # 分类类别数
+  freeze_backbone: false                 # 是否冻结backbone
+  dropout: 0.1                          # Dropout概率
+
+# 训练配置
+training:
+  batch_size: 32                        # 批大小
+  epochs: 50                            # 训练轮数
+  use_amp: true                         # 是否使用混合精度训练
+  gradient_clip: 1.0                   # 梯度裁剪阈值
+  early_stopping_patience: 10           # 早停耐心值
+
+# 优化器配置
+optimizer:
+  type: "adamw"                         # 优化器类型 (adamw, adam, sgd)
+  lr: 0.0001                            # 学习率
+  weight_decay: 0.01                    # 权重衰减
+
+# 学习率调度器配置
+scheduler:
+  type: "cosine"                        # 调度器类型 (cosine, step, plateau, none)
+  T_max: 50                             # Cosine: 最大迭代次数
+  eta_min: 0.000001                     # Cosine: 最小学习率
+  step_size: 10                         # Step: 步长
+  gamma: 0.1                            # Step: 学习率衰减因子
+  patience: 5                           # Plateau: 耐心值
+
+# 类别权重 (处理数据不平衡)
+class_weights:                          # 将根据数据集自动计算，也可手动指定
+  auto: true                           # 自动计算
+
+# 输出配置
+output:
+  checkpoint_dir: "checkpoints"         # 模型保存目录
+  log_dir: "logs"                       # 日志保存目录
+  save_frequency: 5                     # 保存频率 (每N个epoch保存一次)
+
+# 随机种子
+seed: 42                                # 随机种子
