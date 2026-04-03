@@ -20,7 +20,7 @@ model:
 # 训练配置
 training:
   batch_size: 32                        # 批大小
-  epochs: 50                            # 训练轮数
+  epochs: 500                          # 训练轮数
   use_amp: true                         # 是否使用混合精度训练
   gradient_clip: 1.0                   # 梯度裁剪阈值
   early_stopping_patience: 10           # 早停耐心值
