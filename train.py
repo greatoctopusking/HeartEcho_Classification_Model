@@ -4,7 +4,7 @@
 
 使用方法:
     python train.py --cactus_data "CACTUS/Images Dataset" --batch_size 32 --epochs 50
-    python train.py --config configs/config.yaml
+    python train.py --config configs/train_config.yaml
     python train.py --cactus_data "data/CACTUS" --pretrained "weights/usfmae.pt" --lr 1e-4
 """
 
@@ -289,6 +289,27 @@ def main():
     logger.info(f"  早停耐心: {args.early_stopping_patience}")
     
     logger.log_config(vars(args))
+    
+    print("\n验证数据集...")
+    from data.cactus_loader import verify_cactus_data
+    from data.camus_loader import verify_camus_data
+    
+    cactus_valid = verify_cactus_data(args.cactus_data)
+    if not cactus_valid:
+        logger.error("CACTUS 数据集验证失败，请检查数据路径")
+        return
+    
+    camus_valid = True
+    if args.camus_data and os.path.exists(args.camus_data):
+        camus_valid = verify_camus_data(args.camus_data)
+        if not camus_valid:
+            logger.error("CAMUS 数据集验证失败，请检查数据路径")
+            return
+    else:
+        logger.info("未找到 CAMUS 数据集，将仅使用 CACTUS 数据 (6类)")
+        args.camus_data = None
+    
+    logger.info("数据集验证通过")
     
     print("\n加载数据集...")
     try:

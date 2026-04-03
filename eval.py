@@ -134,26 +134,27 @@ def parse_args():
     return parser.parse_args()
 
 
-def load_config_from_yaml(config_path: str) -> dict:
-    """从YAML文件加载配置"""
+def load_config_from_yaml(config_path: str, args) -> None:
+    """从YAML文件加载配置到args"""
     with open(config_path, 'r', encoding='utf-8') as f:
         config = yaml.safe_load(f)
-    return config
+    
+    # 处理顶层配置
+    for key, value in config.items():
+        if hasattr(args, key):
+            if isinstance(value, dict):
+                for sub_key, sub_value in value.items():
+                    if hasattr(args, sub_key):
+                        setattr(args, sub_key, sub_value)
+            else:
+                setattr(args, key, value)
 
 
 def main():
     args = parse_args()
     
     if args.config is not None:
-        config = load_config_from_yaml(args.config)
-        for key, value in config.items():
-            if hasattr(args, key):
-                if isinstance(value, dict):
-                    for sub_key, sub_value in value.items():
-                        if hasattr(args, sub_key):
-                            setattr(args, sub_key, sub_value)
-                else:
-                    setattr(args, key, value)
+        load_config_from_yaml(args.config, args)
     
     device = args.device if torch.cuda.is_available() else 'cpu'
     print(f"使用设备: {device}")

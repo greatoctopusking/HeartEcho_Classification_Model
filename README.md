@@ -112,7 +112,7 @@ python train.py \
 #### 使用配置文件
 
 ```bash
-python train.py --config configs/config.yaml
+python train.py --config configs/train_config.yaml
 ```
 
 ### 评估模型

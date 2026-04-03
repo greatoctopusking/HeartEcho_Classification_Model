@@ -4,3 +4,4 @@ USF-MAE pretrained/
 
 #Pycharm
 .idea/
+/data/__pycache__
