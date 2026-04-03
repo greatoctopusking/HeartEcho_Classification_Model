@@ -131,6 +131,13 @@ def parse_args():
         help='评估设备'
     )
     
+    parser.add_argument(
+        '--fold', 
+        type=int, 
+        default=0,
+        help='评估指定折的模型 (0=默认best模型)'
+    )
+    
     return parser.parse_args()
 
 
@@ -158,6 +165,15 @@ def main():
     
     device = args.device if torch.cuda.is_available() else 'cpu'
     print(f"使用设备: {device}")
+    
+    if args.fold > 0:
+        checkpoint_dir = os.path.dirname(args.checkpoint)
+        args.checkpoint = os.path.join(checkpoint_dir, f'fold_{args.fold}.pth')
+        print(f"评估Fold {args.fold}模型: {args.checkpoint}")
+    elif args.checkpoint.endswith('best.pth') or 'best_model' in args.checkpoint:
+        print("评估最佳模型")
+    else:
+        print(f"评估模型: {args.checkpoint}")
     
     os.makedirs(args.save_dir, exist_ok=True)
     

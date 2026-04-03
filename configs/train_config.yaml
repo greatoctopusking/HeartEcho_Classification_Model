@@ -24,6 +24,9 @@ training:
   use_amp: true                         # 是否使用混合精度训练
   gradient_clip: 1.0                   # 梯度裁剪阈值
   early_stopping_patience: 10           # 早停耐心值
+  kfold: 5                              # K折交叉验证 (0=不使用kfold)
+  kfold_save_all: true                  # 保存所有kfold模型
+  stratified: true                      # 分层采样，保持类别比例
 
 # 优化器配置
 optimizer:

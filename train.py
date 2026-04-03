@@ -208,6 +208,33 @@ def parse_args():
         help='从checkpoint恢复训练'
     )
     
+    parser.add_argument(
+        '--kfold', 
+        type=int, 
+        default=0,
+        help='K折交叉验证 (0=不使用kfold，5=5折交叉验证)'
+    )
+    
+    parser.add_argument(
+        '--kfold_save_all', 
+        action='store_true',
+        default=True,
+        help='保存所有kfold模型的权重'
+    )
+    
+    parser.add_argument(
+        '--stratified', 
+        action='store_true',
+        default=True,
+        help='分层采样，保持类别比例'
+    )
+    
+    parser.add_argument(
+        '--no_kfold',
+        action='store_true',
+        help='显式使用简单划分模式（不使用kfold）'
+    )
+    
     return parser.parse_args()
 
 
@@ -311,6 +338,9 @@ def main():
     
     logger.info("数据集验证通过")
     
+    if args.no_kfold:
+        args.kfold = 0
+    
     print("\n加载数据集...")
     try:
         train_loader, val_loader, test_loader = get_data_loaders(
@@ -338,6 +368,22 @@ def main():
     except Exception as e:
         logger.error(f"数据加载失败: {e}")
         return
+    
+    logger.info("\n训练配置:")
+    if args.kfold > 0:
+        logger.info(f"  训练模式: {args.kfold}折交叉验证")
+        logger.info(f"  分层采样: {args.stratified}")
+        logger.info(f"  保存所有折: {args.kfold_save_all}")
+        kfold_dir = os.path.join(args.checkpoint_dir, 'kfold')
+        os.makedirs(kfold_dir, exist_ok=True)
+        logger.info(f"  KFold模型目录: {kfold_dir}")
+    else:
+        logger.info(f"  训练模式: 简单划分")
+    
+    if args.kfold > 0:
+        run_kfold_training(args, logger, class_weights, device, data_info)
+    else:
+        run_simple_training(args, logger, class_weights, device)
     
     print("创建模型...")
     try:
@@ -423,6 +469,237 @@ def main():
     print("训练完成!")
     print(f"最佳验证准确率: {trainer.best_val_acc:.2f}%")
     print("=" * 60)
+
+
+def run_simple_training(args, logger, class_weights, device):
+    """简单划分模式训练"""
+    from data import get_data_loaders
+    from models import load_model_with_pretrained, create_usfmae_backbone, CardiacClassifier
+    
+    train_loader, val_loader, test_loader = get_data_loaders(
+        cactus_data_root=args.cactus_data,
+        camus_data_root=args.camus_data if os.path.exists(args.camus_data) else None,
+        batch_size=args.batch_size,
+        num_workers=args.num_workers,
+        val_split=args.val_split,
+        test_split=args.test_split,
+        random_seed=args.seed
+    )
+    
+    print("创建模型...")
+    if os.path.exists(args.pretrained):
+        model = load_model_with_pretrained(
+            pretrained_path=args.pretrained,
+            num_classes=args.num_classes,
+            freeze_backbone=args.freeze_backbone,
+            device=device
+        )
+    else:
+        backbone = create_usfmae_backbone(pretrained_path=None, freeze=args.freeze_backbone, device=device)
+        model = CardiacClassifier(backbone=backbone, num_classes=args.num_classes, dropout=args.dropout).to(device)
+    
+    optimizer_config = {'type': 'adamw', 'lr': args.lr, 'weight_decay': args.weight_decay}
+    from utils import create_optimizer, create_scheduler
+    optimizer = create_optimizer(model, optimizer_config)
+    scheduler = create_scheduler(optimizer, {'type': args.scheduler, 'T_max': args.epochs, 'eta_min': args.lr * 0.01})
+    
+    criterion = torch.nn.CrossEntropyLoss(weight=class_weights.to(device))
+    
+    trainer = Trainer(
+        model=model, train_loader=train_loader, val_loader=val_loader,
+        criterion=criterion, optimizer=optimizer, scheduler=scheduler,
+        device=device, checkpoint_dir=args.checkpoint_dir, logger=logger,
+        use_amp=args.use_amp, gradient_clip=args.gradient_clip if args.gradient_clip > 0 else None,
+        early_stopping_patience=args.early_stopping_patience
+    )
+    
+    if args.resume and os.path.exists(args.resume):
+        trainer.load_checkpoint(args.resume)
+    
+    print("\n开始训练...")
+    history = trainer.train(num_epochs=args.epochs, save_best=True, save_last=True, save_frequency=5)
+    
+    logger.save_history(history)
+    logger.info(f"\n训练完成! 最佳验证准确率: {trainer.best_val_acc:.2f}%")
+    logger.close()
+    
+    print(f"\n训练完成! 最佳验证准确率: {trainer.best_val_acc:.2f}%")
+
+
+def run_kfold_training(args, logger, class_weights, device, data_info):
+    """K折交叉验证训练"""
+    import json
+    from sklearn.model_selection import KFold, StratifiedKFold
+    from data.dataset import CardiacDataset, get_train_transforms, get_val_transforms
+    from data.cactus_loader import get_cactus_data_info
+    from data.camus_loader import get_camus_data_info
+    from models import load_model_with_pretrained, create_usfmae_backbone, CardiacClassifier
+    from utils import create_optimizer, create_scheduler
+    
+    kfold_dir = os.path.join(args.checkpoint_dir, 'kfold')
+    
+    all_paths = []
+    all_labels = []
+    
+    cactus_paths, cactus_labels = get_cactus_data_info(args.cactus_data)
+    all_paths.extend(cactus_paths)
+    all_labels.extend(cactus_labels)
+    
+    if args.camus_data and os.path.exists(args.camus_data):
+        camus_paths, camus_labels = get_camus_data_info(args.camus_data)
+        all_paths.extend(camus_paths)
+        all_labels.extend(camus_labels)
+    
+    all_labels = np.array(all_labels)
+    n_samples = len(all_paths)
+    
+    print(f"\n开始{args.kfold}折交叉验证...")
+    logger.info(f"\n开始{args.kfold}折交叉验证，共{n_samples}个样本")
+    
+    if args.stratified:
+        kfold = StratifiedKFold(n_splits=args.kfold, shuffle=True, random_seed=args.seed)
+    else:
+        kfold = KFold(n_splits=args.kfold, shuffle=True, random_seed=args.seed)
+    
+    fold_results = []
+    best_fold = 0
+    best_acc = 0.0
+    
+    for fold, (train_idx, val_idx) in enumerate(kfold.split(all_paths, all_labels)):
+        fold_num = fold + 1
+        print(f"\n{'='*60}")
+        print(f"{args.kfold}折交叉验证 - Fold {fold_num}/{args.kfold}")
+        print(f"{'='*60}")
+        
+        logger.info(f"\n{'='*60}")
+        logger.info(f"{args.kfold}折交叉验证 - Fold {fold_num}/{args.kfold}")
+        logger.info(f"{'='*60}")
+        
+        train_paths = [all_paths[i] for i in train_idx]
+        train_labels = [all_labels[i] for i in train_idx]
+        val_paths = [all_paths[i] for i in val_idx]
+        val_labels = [all_labels[i] for i in val_idx]
+        
+        logger.info(f"训练集: {len(train_paths)}样本, 验证集: {len(val_paths)}样本")
+        
+        train_transform = get_train_transforms(args.img_size)
+        val_transform = get_val_transforms(args.img_size)
+        
+        train_dataset = CardiacDataset(train_paths, train_labels, transform=train_transform)
+        val_dataset = CardiacDataset(val_paths, val_labels, transform=val_transform)
+        
+        train_loader = torch.utils.data.DataLoader(
+            train_dataset, batch_size=args.batch_size, shuffle=True,
+            num_workers=args.num_workers, pin_memory=True, drop_last=True
+        )
+        val_loader = torch.utils.data.DataLoader(
+            val_dataset, batch_size=args.batch_size, shuffle=False,
+            num_workers=args.num_workers, pin_memory=True
+        )
+        
+        print("创建模型...")
+        if os.path.exists(args.pretrained):
+            model = load_model_with_pretrained(
+                pretrained_path=args.pretrained,
+                num_classes=args.num_classes,
+                freeze_backbone=args.freeze_backbone,
+                device=device
+            )
+        else:
+            backbone = create_usfmae_backbone(pretrained_path=None, freeze=args.freeze_backbone, device=device)
+            model = CardiacClassifier(backbone=backbone, num_classes=args.num_classes, dropout=args.dropout).to(device)
+        
+        optimizer_config = {'type': 'adamw', 'lr': args.lr, 'weight_decay': args.weight_decay}
+        optimizer = create_optimizer(model, optimizer_config)
+        scheduler = create_scheduler(optimizer, {'type': args.scheduler, 'T_max': args.epochs, 'eta_min': args.lr * 0.01})
+        
+        criterion = torch.nn.CrossEntropyLoss(weight=class_weights.to(device))
+        
+        fold_checkpoint_dir = kfold_dir
+        trainer = Trainer(
+            model=model, train_loader=train_loader, val_loader=val_loader,
+            criterion=criterion, optimizer=optimizer, scheduler=scheduler,
+            device=device, checkpoint_dir=fold_checkpoint_dir, logger=logger,
+            use_amp=args.use_amp, gradient_clip=args.gradient_clip if args.gradient_clip > 0 else None,
+            early_stopping_patience=args.early_stopping_patience
+        )
+        
+        history = trainer.train(num_epochs=args.epochs, save_best=True, save_last=False, save_frequency=0)
+        
+        val_acc = trainer.best_val_acc
+        fold_results.append({
+            'fold': fold_num,
+            'val_acc': val_acc,
+            'train_samples': len(train_paths),
+            'val_samples': len(val_paths)
+        })
+        
+        if args.kfold_save_all:
+            best_model_path = os.path.join(fold_checkpoint_dir, 'best_model.pth')
+            new_model_path = os.path.join(kfold_dir, f'fold_{fold_num}.pth')
+            if os.path.exists(best_model_path):
+                import shutil
+                shutil.copy(best_model_path, new_model_path)
+        
+        if val_acc > best_acc:
+            best_acc = val_acc
+            best_fold = fold_num
+        
+        logger.info(f"Fold {fold_num}完成! Val Acc: {val_acc:.2f}%")
+        print(f"Fold {fold_num}完成! Val Acc: {val_acc:.2f}%")
+    
+    import shutil
+    best_model_source = os.path.join(kfold_dir, f'fold_{best_fold}.pth')
+    best_model_dest = os.path.join(kfold_dir, 'best.pth')
+    if os.path.exists(best_model_source):
+        shutil.copy(best_model_source, best_model_dest)
+    
+    accs = [r['val_acc'] for r in fold_results]
+    mean_acc = np.mean(accs)
+    std_acc = np.std(accs)
+    
+    print(f"\n{'='*60}")
+    print(f"{args.kfold}折交叉验证结果汇总")
+    print(f"{'='*60}")
+    print(f"| Fold | Val Acc |")
+    print(f"|------|---------|")
+    for r in fold_results:
+        marker = " ★" if r['fold'] == best_fold else ""
+        print(f"|  {r['fold']}   | {r['val_acc']:.2f}%  |{marker}")
+    print(f"{'-'*60}")
+    print(f"平均准确率: {mean_acc:.2f}% ± {std_acc:.2f}%")
+    print(f"最佳折: Fold {best_fold} ({best_acc:.2f}%)")
+    print(f"{'='*60}")
+    print(f"✓ 最佳模型: fold_{best_fold}.pth (Val Acc: {best_acc:.2f}%)")
+    print(f"✓ 已复制到: best.pth")
+    
+    logger.info(f"\n{'='*60}")
+    logger.info(f"{args.kfold}折交叉验证结果汇总")
+    logger.info(f"{'='*60}")
+    for r in fold_results:
+        marker = " ★" if r['fold'] == best_fold else ""
+        logger.info(f"Fold {r['fold']}: Val Acc = {r['val_acc']:.2f}%{marker}")
+    logger.info(f"平均准确率: {mean_acc:.2f}% ± {std_acc:.2f}%")
+    logger.info(f"最佳折: Fold {best_fold} ({best_acc:.2f}%)")
+    logger.info(f"✓ 最佳模型: kfold/fold_{best_fold}.pth")
+    logger.info(f"✓ 已复制到: kfold/best.pth")
+    
+    kfold_results = {
+        'fold_results': fold_results,
+        'mean_acc': float(mean_acc),
+        'std_acc': float(std_acc),
+        'best_fold': best_fold,
+        'best_acc': float(best_acc),
+        'kfold': args.kfold,
+        'stratified': args.stratified
+    }
+    
+    results_path = os.path.join(kfold_dir, 'kfold_results.json')
+    with open(results_path, 'w') as f:
+        json.dump(kfold_results, f, indent=2)
+    logger.info(f"结果已保存: {results_path}")
+    
+    logger.close()
 
 
 if __name__ == '__main__':
