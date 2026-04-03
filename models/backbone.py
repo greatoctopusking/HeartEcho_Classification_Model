@@ -58,6 +58,10 @@ class USFMAEEncoder(nn.Module):
         
         num_patches = self.patch_embed.num_patches
         self.num_tokens = 1 if use_cls_token else 0
+        
+        if use_cls_token:
+            self.cls_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
+        
         self.pos_embed = nn.Parameter(
             torch.zeros(1, num_patches + self.num_tokens, embed_dim)
         )
@@ -85,6 +89,8 @@ class USFMAEEncoder(nn.Module):
     def _init_weights(self):
         """初始化权重"""
         nn.init.trunc_normal_(self.pos_embed, std=0.02)
+        if self.use_cls_token:
+            nn.init.trunc_normal_(self.cls_token, std=0.02)
         self.apply(self._init_module_weights)
     
     def _init_module_weights(self, m):
@@ -110,11 +116,8 @@ class USFMAEEncoder(nn.Module):
         x = self.patch_embed(x)
         
         if self.use_cls_token:
-            cls_token = torch.zeros(
-                x.shape[0], 1, self.embed_dim,
-                device=x.device, dtype=x.dtype
-            )
-            x = torch.cat([cls_token, x], dim=1)
+            cls_tokens = self.cls_token.expand(x.shape[0], -1, -1)
+            x = torch.cat([cls_tokens, x], dim=1)
         
         x = x + self.pos_embed
         x = self.pos_drop(x)

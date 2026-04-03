@@ -8,6 +8,7 @@ from torch.utils.data import Dataset, DataLoader, Subset
 from torchvision import transforms
 from PIL import Image
 import numpy as np
+from sklearn.model_selection import StratifiedShuffleSplit
 
 from .cactus_loader import get_cactus_data_info, CLASS_NAMES as CACTUS_CLASSES
 from .camus_loader import get_camus_data_info, CLASS_NAME as CAMUS_CLASS, CLASS_IDX as CAMUS_IDX
@@ -37,12 +38,12 @@ def get_train_transforms(image_size: int = 224) -> transforms.Compose:
     return transforms.Compose([
         transforms.RandomResizedCrop(
             image_size,
-            scale=(0.5, 2.0),
+            scale=(0.7, 1.0),
             ratio=(0.75, 1.333)
         ),
         transforms.RandomHorizontalFlip(p=0.5),
         transforms.RandomVerticalFlip(p=0.5),
-        transforms.RandomRotation(degrees=(0, 90)),
+        transforms.RandomRotation(degrees=(-15, 15)),
         transforms.ColorJitter(
             brightness=0.2,
             contrast=0.2,
@@ -149,13 +150,23 @@ class CardiacDataset(Dataset):
         """
         计算类别权重（用于处理数据不平衡）
         
+        使用 sklearn 标准方法计算平衡权重
+        
         Returns:
             类别权重张量
         """
-        counts = self.get_class_counts()
-        weights = 1.0 / (counts + 1e-6)
-        weights = weights / weights.sum() * len(ALL_CLASS_NAMES)
-        return torch.FloatTensor(weights)
+        from sklearn.utils.class_weight import compute_class_weight
+        
+        labels_array = np.array(self.labels)
+        unique_classes = np.arange(len(ALL_CLASS_NAMES))
+        
+        class_weights = compute_class_weight(
+            class_weight='balanced',
+            classes=unique_classes,
+            y=labels_array
+        )
+        
+        return torch.FloatTensor(class_weights)
 
 
 def combine_datasets(
@@ -163,7 +174,8 @@ def combine_datasets(
     camus_data_root: Optional[str] = None,
     val_split: float = 0.15,
     test_split: float = 0.15,
-    random_seed: int = 42
+    random_seed: int = 42,
+    stratified: bool = True
 ) -> Tuple[Dataset, Dataset, Dataset]:
     """
     合并 CACTUS 和 CAMUS 数据集，并划分为训练/验证/测试集
@@ -174,6 +186,7 @@ def combine_datasets(
         val_split: 验证集比例
         test_split: 测试集比例
         random_seed: 随机种子
+        stratified: 是否使用分层采样
     
     Returns:
         (train_dataset, val_dataset, test_dataset)
@@ -198,35 +211,63 @@ def combine_datasets(
     total_samples = len(all_paths)
     print(f"合并后总样本数: {total_samples}")
     
-    indices = list(range(total_samples))
-    random.shuffle(indices)
+    all_labels = np.array(all_labels)
     
     test_size = int(total_samples * test_split)
     val_size = int(total_samples * val_split)
-    train_size = total_samples - test_size - val_size
     
-    test_indices = indices[:test_size]
-    val_indices = indices[test_size:test_size + val_size]
-    train_indices = indices[test_size + val_size:]
+    if stratified:
+        sss = StratifiedShuffleSplit(n_splits=1, test_size=test_size + val_size, random_state=random_seed)
+        train_idx, test_val_idx = next(sss.split(all_paths, all_labels))
+        
+        train_paths = [all_paths[i] for i in train_idx]
+        train_labels = [all_labels[i] for i in train_idx]
+        
+        remaining_paths = [all_paths[i] for i in test_val_idx]
+        remaining_labels = [all_labels[i] for i in test_val_idx]
+        
+        val_size_adjusted = int(len(remaining_paths) * (val_size / (test_size + val_size)))
+        
+        sss_val = StratifiedShuffleSplit(n_splits=1, test_size=val_size_adjusted, random_state=random_seed)
+        val_idx_final, test_idx_final = next(sss_val.split(remaining_paths, remaining_labels))
+        
+        val_paths = [remaining_paths[i] for i in val_idx_final]
+        val_labels = [remaining_labels[i] for i in val_idx_final]
+        test_paths = [remaining_paths[i] for i in test_idx_final]
+        test_labels = [remaining_labels[i] for i in test_idx_final]
+    else:
+        indices = list(range(total_samples))
+        random.shuffle(indices)
+        
+        test_indices = indices[:test_size]
+        val_indices = indices[test_size:test_size + val_size]
+        train_indices = indices[test_size + val_size:]
+        
+        train_paths = [all_paths[i] for i in train_indices]
+        train_labels = [all_labels[i] for i in train_indices]
+        val_paths = [all_paths[i] for i in val_indices]
+        val_labels = [all_labels[i] for i in val_indices]
+        test_paths = [all_paths[i] for i in test_indices]
+        test_labels = [all_labels[i] for i in test_indices]
     
     train_transform = get_train_transforms()
     val_transform = get_val_transforms()
     
     train_dataset = CardiacDataset(
-        image_paths=[all_paths[i] for i in train_indices],
-        labels=[all_labels[i] for i in train_indices],
+        image_paths=train_paths,
+        labels=train_labels,
         transform=train_transform
     )
     
     val_dataset = CardiacDataset(
-        image_paths=[all_paths[i] for i in val_indices],
-        labels=[all_labels[i] for i in val_indices],
+        image_paths=val_paths,
+        labels=val_labels,
         transform=val_transform
     )
     
     test_dataset = CardiacDataset(
-        image_paths=[all_paths[i] for i in test_indices],
-        labels=[all_labels[i] for i in test_indices],
+        image_paths=test_paths,
+        labels=test_labels,
         transform=val_transform
     )
     

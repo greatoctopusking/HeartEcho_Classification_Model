@@ -381,110 +381,18 @@ def main():
         logger.info(f"  训练模式: 简单划分")
     
     if args.kfold > 0:
-        run_kfold_training(args, logger, class_weights, device, data_info)
+        run_kfold_training(args, logger, class_weights, device, train_loader, val_loader, data_info)
     else:
-        run_simple_training(args, logger, class_weights, device)
-    
-    print("创建模型...")
-    try:
-        if os.path.exists(args.pretrained):
-            model = load_model_with_pretrained(
-                pretrained_path=args.pretrained,
-                num_classes=args.num_classes,
-                freeze_backbone=args.freeze_backbone,
-                device=device
-            )
-            logger.info(f"成功加载预训练权重: {args.pretrained}")
-        else:
-            logger.warning(f"预训练权重不存在: {args.pretrained}，使用随机初始化")
-            backbone = create_usfmae_backbone(
-                pretrained_path=None,
-                freeze=args.freeze_backbone,
-                device=device
-            )
-            model = CardiacClassifier(
-                backbone=backbone,
-                num_classes=args.num_classes,
-                dropout=args.dropout
-            )
-            model = model.to(device)
-        
-        logger.log_model_info(model)
-        
-    except Exception as e:
-        logger.error(f"模型创建失败: {e}")
-        return
-    
-    optimizer_config = {
-        'type': 'adamw',
-        'lr': args.lr,
-        'weight_decay': args.weight_decay
-    }
-    optimizer = create_optimizer(model, optimizer_config)
-    
-    scheduler_config = {
-        'type': args.scheduler,
-        'T_max': args.epochs,
-        'eta_min': args.lr * 0.01
-    }
-    scheduler = create_scheduler(optimizer, scheduler_config)
-    
-    criterion = nn.CrossEntropyLoss(weight=class_weights.to(device))
-    
-    trainer = Trainer(
-        model=model,
-        train_loader=train_loader,
-        val_loader=val_loader,
-        criterion=criterion,
-        optimizer=optimizer,
-        scheduler=scheduler,
-        device=device,
-        checkpoint_dir=args.checkpoint_dir,
-        logger=logger,
-        use_amp=args.use_amp,
-        gradient_clip=args.gradient_clip if args.gradient_clip > 0 else None,
-        early_stopping_patience=args.early_stopping_patience
-    )
-    
-    if args.resume is not None and os.path.exists(args.resume):
-        logger.info(f"从checkpoint恢复: {args.resume}")
-        trainer.load_checkpoint(args.resume)
-    
-    print("\n开始训练...")
-    history = trainer.train(
-        num_epochs=args.epochs,
-        save_best=True,
-        save_last=True,
-        save_frequency=5
-    )
-    
-    logger.save_history(history)
+        run_simple_training(args, logger, class_weights, device, train_loader, val_loader, test_loader)
     
     logger.info("\n训练完成!")
-    logger.info(f"最佳验证准确率: {trainer.best_val_acc:.2f}%")
-    logger.info(f"模型保存目录: {args.checkpoint_dir}")
     logger.close()
-    
-    print("\n" + "=" * 60)
-    print("训练完成!")
-    print(f"最佳验证准确率: {trainer.best_val_acc:.2f}%")
-    print("=" * 60)
 
 
-def run_simple_training(args, logger, class_weights, device):
+def run_simple_training(args, logger, class_weights, device, train_loader, val_loader, test_loader):
     """简单划分模式训练"""
-    from data import get_data_loaders
     from models import load_model_with_pretrained, create_usfmae_backbone, CardiacClassifier
-    
-    train_loader, val_loader, test_loader = get_data_loaders(
-        cactus_data_root=args.cactus_data,
-        camus_data_root=args.camus_data if os.path.exists(args.camus_data) else None,
-        batch_size=args.batch_size,
-        num_workers=args.num_workers,
-        val_split=args.val_split,
-        test_split=args.test_split,
-        random_seed=args.seed
-    )
+    from utils import create_optimizer, create_scheduler
     
     print("创建模型...")
     if os.path.exists(args.pretrained):
@@ -499,7 +407,6 @@ def run_simple_training(args, logger, class_weights, device):
         model = CardiacClassifier(backbone=backbone, num_classes=args.num_classes, dropout=args.dropout).to(device)
     
     optimizer_config = {'type': 'adamw', 'lr': args.lr, 'weight_decay': args.weight_decay}
-    from utils import create_optimizer, create_scheduler
     optimizer = create_optimizer(model, optimizer_config)
     scheduler = create_scheduler(optimizer, {'type': args.scheduler, 'T_max': args.epochs, 'eta_min': args.lr * 0.01})
     
@@ -521,12 +428,9 @@ def run_simple_training(args, logger, class_weights, device):
     
     logger.save_history(history)
     logger.info(f"\n训练完成! 最佳验证准确率: {trainer.best_val_acc:.2f}%")
-    logger.close()
-    
-    print(f"\n训练完成! 最佳验证准确率: {trainer.best_val_acc:.2f}%")
 
 
-def run_kfold_training(args, logger, class_weights, device, data_info):
+def run_kfold_training(args, logger, class_weights, device, train_loader, val_loader, data_info):
     """K折交叉验证训练"""
     import json
     from sklearn.model_selection import KFold, StratifiedKFold
