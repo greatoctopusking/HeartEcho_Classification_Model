@@ -118,7 +118,7 @@ class CardiacDataset(Dataset):
                 (image_tensor, label, image_path)
         """
         img_path = self.image_paths[idx]
-        label = self.labels[idx]
+        label = torch.tensor(self.labels[idx], dtype=torch.long)
         
         try:
             image = Image.open(img_path).convert('RGB')
