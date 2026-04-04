@@ -461,9 +461,9 @@ def run_kfold_training(args, logger, class_weights, device, train_loader, val_lo
     logger.info(f"\n开始{args.kfold}折交叉验证，共{n_samples}个样本")
     
     if args.stratified:
-        kfold = StratifiedKFold(n_splits=args.kfold, shuffle=True, random_seed=args.seed)
+        kfold = StratifiedKFold(n_splits=args.kfold, shuffle=True, random_state=args.seed)
     else:
-        kfold = KFold(n_splits=args.kfold, shuffle=True, random_seed=args.seed)
+        kfold = KFold(n_splits=args.kfold, shuffle=True, random_state=args.seed)
     
     fold_results = []
     best_fold = 0
