@@ -58,7 +58,7 @@ class Trainer:
         self.optimizer = optimizer if optimizer is not None else torch.optim.AdamW(model.parameters())
         self.scheduler = scheduler
         
-        self.scaler = torch.cuda.amp.GradScaler() if use_amp else None
+        self.scaler = torch.amp.GradScaler('cuda') if use_amp else None
         
         self.best_val_acc = 0.0
         self.epochs_without_improvement = 0
