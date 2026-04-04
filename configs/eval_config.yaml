@@ -1,27 +1,21 @@
-# 心脏超声切面分类模型评估配置文件
-
 # 数据配置
-data:
-  cactus_root: "CACTUS/Images Dataset"  # CACTUS数据集路径
-  camus_root: "CAMUS"                    # CAMUS数据集路径
-  val_split: 0.15                       # 验证集比例
-  test_split: 0.15                       # 测试集比例
-  num_workers: 4                        # 数据加载线程数
-  image_size: 224                       # 输入图像尺寸
+data: "CACTUS/Images Dataset"
+camus_data: "CAMUS"
+val_split: 0.15
+test_split: 0.15
+num_workers: 4
 
 # 模型配置
-model:
-  num_classes: 7                        # 分类类别数
-  checkpoint: "checkpoints/best_model.pth"  # 模型检查点路径
+num_classes: 7
+batch_size: 32
 
 # 评估配置
-evaluation:
-  batch_size: 32                        # 批大小
-  test_only: false                      # 仅在测试集上评估
-  val_only: false                       # 仅在验证集上评估
-  plot_confusion_matrix: true           # 绘制混淆矩阵
-  plot_roc_curves: true                 # 绘制ROC曲线
+test_only: false
+val_only: false
+plot_cm: true
+plot_roc: true
+save_dir: "results"
+fold: 0
 
-# 输出配置
-output:
-  save_dir: "results"                   # 结果保存目录
+# 随机种子
+seed: 42
