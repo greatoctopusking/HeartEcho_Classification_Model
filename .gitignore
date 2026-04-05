@@ -1,6 +1,7 @@
 # dataset
 CACTUS/
 USF-MAE pretrained/
+checkpoints/
 
 #Pycharm
 .idea/

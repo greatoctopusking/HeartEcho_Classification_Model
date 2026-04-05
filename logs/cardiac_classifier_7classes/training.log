@@ -1,0 +1,158 @@
+2026-04-04 13:28:23 - cardiac_classifier_7classes - INFO - 实验目录: logs\cardiac_classifier_7classes
+2026-04-04 13:28:23 - cardiac_classifier_7classes - INFO - ============================================================
+2026-04-04 13:28:23 - cardiac_classifier_7classes - INFO - 心脏超声切面分类模型训练
+2026-04-04 13:28:23 - cardiac_classifier_7classes - INFO - ============================================================
+2026-04-04 13:28:23 - cardiac_classifier_7classes - INFO - 系统信息:
+2026-04-04 13:28:23 - cardiac_classifier_7classes - INFO -   Python Version: 3.10.14
+2026-04-04 13:28:23 - cardiac_classifier_7classes - INFO -   PyTorch Version: 2.4.1
+2026-04-04 13:28:23 - cardiac_classifier_7classes - INFO -   CUDA Available: True
+2026-04-04 13:28:23 - cardiac_classifier_7classes - INFO -   CUDA Version: 12.1
+2026-04-04 13:28:23 - cardiac_classifier_7classes - INFO -   GPU Device: NVIDIA GeForce RTX 4090
+2026-04-04 13:28:23 - cardiac_classifier_7classes - INFO -   GPU Count: 1
+2026-04-04 13:28:23 - cardiac_classifier_7classes - INFO - 
+数据配置:
+2026-04-04 13:28:23 - cardiac_classifier_7classes - INFO -   CACTUS数据: CACTUS/Images Dataset
+2026-04-04 13:28:23 - cardiac_classifier_7classes - INFO -   CAMUS数据: CAMUS
+2026-04-04 13:28:23 - cardiac_classifier_7classes - INFO -   验证集比例: 0.15
+2026-04-04 13:28:23 - cardiac_classifier_7classes - INFO -   测试集比例: 0.15
+2026-04-04 13:28:23 - cardiac_classifier_7classes - INFO -   图像尺寸: 224
+2026-04-04 13:28:23 - cardiac_classifier_7classes - INFO -   批大小: 32
+2026-04-04 13:28:23 - cardiac_classifier_7classes - INFO -   Workers: 4
+2026-04-04 13:28:23 - cardiac_classifier_7classes - INFO - 
+模型配置:
+2026-04-04 13:28:23 - cardiac_classifier_7classes - INFO -   预训练权重: USF-MAE pretrained/USF-MAE_full_pretrain_43dataset_100epochs.pt
+2026-04-04 13:28:23 - cardiac_classifier_7classes - INFO -   类别数: 7
+2026-04-04 13:28:23 - cardiac_classifier_7classes - INFO -   冻结backbone: False
+2026-04-04 13:28:23 - cardiac_classifier_7classes - INFO -   Dropout: 0.1
+2026-04-04 13:28:23 - cardiac_classifier_7classes - INFO - 
+训练配置:
+2026-04-04 13:28:23 - cardiac_classifier_7classes - INFO -   Epochs: 50
+2026-04-04 13:28:23 - cardiac_classifier_7classes - INFO -   学习率: 0.0001
+2026-04-04 13:28:23 - cardiac_classifier_7classes - INFO -   权重衰减: 0.01
+2026-04-04 13:28:23 - cardiac_classifier_7classes - INFO -   调度器: cosine
+2026-04-04 13:28:23 - cardiac_classifier_7classes - INFO -   混合精度: True
+2026-04-04 13:28:23 - cardiac_classifier_7classes - INFO -   梯度裁剪: 1.0
+2026-04-04 13:28:23 - cardiac_classifier_7classes - INFO -   早停耐心: 10
+2026-04-04 13:28:23 - cardiac_classifier_7classes - INFO - 配置已保存至: logs\cardiac_classifier_7classes\config.json
+2026-04-04 13:28:23 - cardiac_classifier_7classes - INFO - 数据集验证通过
+2026-04-04 13:28:24 - cardiac_classifier_7classes - INFO - 
+类别权重: [0.90465194 1.1005787  1.1515363  1.1165253  1.1152008  1.0582106
+ 0.7245024 ]
+2026-04-04 13:28:24 - cardiac_classifier_7classes - INFO - 数据集信息:
+  train_samples: 32904
+  val_samples: 7050
+  test_samples: 7050
+  num_classes: 7
+  class_names: ['A4C', 'PL', 'PSAV', 'PSMV', 'Random', 'SC', 'A2C']
+
+2026-04-04 13:28:24 - cardiac_classifier_7classes - INFO - 
+训练配置:
+2026-04-04 13:28:24 - cardiac_classifier_7classes - INFO -   训练模式: 5折交叉验证
+2026-04-04 13:28:24 - cardiac_classifier_7classes - INFO -   分层采样: True
+2026-04-04 13:28:24 - cardiac_classifier_7classes - INFO -   保存所有折: True
+2026-04-04 13:28:24 - cardiac_classifier_7classes - INFO -   KFold模型目录: checkpoints\kfold
+2026-04-04 13:28:24 - cardiac_classifier_7classes - INFO - 
+开始5折交叉验证，共47004个样本
+2026-04-04 13:30:38 - cardiac_classifier_7classes - INFO - 实验目录: logs\cardiac_classifier_7classes
+2026-04-04 13:30:38 - cardiac_classifier_7classes - INFO - ============================================================
+2026-04-04 13:30:38 - cardiac_classifier_7classes - INFO - 心脏超声切面分类模型训练
+2026-04-04 13:30:38 - cardiac_classifier_7classes - INFO - ============================================================
+2026-04-04 13:30:38 - cardiac_classifier_7classes - INFO - 系统信息:
+2026-04-04 13:30:38 - cardiac_classifier_7classes - INFO -   Python Version: 3.10.14
+2026-04-04 13:30:38 - cardiac_classifier_7classes - INFO -   PyTorch Version: 2.4.1
+2026-04-04 13:30:38 - cardiac_classifier_7classes - INFO -   CUDA Available: True
+2026-04-04 13:30:38 - cardiac_classifier_7classes - INFO -   CUDA Version: 12.1
+2026-04-04 13:30:38 - cardiac_classifier_7classes - INFO -   GPU Device: NVIDIA GeForce RTX 4090
+2026-04-04 13:30:38 - cardiac_classifier_7classes - INFO -   GPU Count: 1
+2026-04-04 13:30:38 - cardiac_classifier_7classes - INFO - 
+数据配置:
+2026-04-04 13:30:38 - cardiac_classifier_7classes - INFO -   CACTUS数据: CACTUS/Images Dataset
+2026-04-04 13:30:38 - cardiac_classifier_7classes - INFO -   CAMUS数据: CAMUS
+2026-04-04 13:30:38 - cardiac_classifier_7classes - INFO -   验证集比例: 0.15
+2026-04-04 13:30:38 - cardiac_classifier_7classes - INFO -   测试集比例: 0.15
+2026-04-04 13:30:38 - cardiac_classifier_7classes - INFO -   图像尺寸: 224
+2026-04-04 13:30:38 - cardiac_classifier_7classes - INFO -   批大小: 32
+2026-04-04 13:30:38 - cardiac_classifier_7classes - INFO -   Workers: 4
+2026-04-04 13:30:38 - cardiac_classifier_7classes - INFO - 
+模型配置:
+2026-04-04 13:30:38 - cardiac_classifier_7classes - INFO -   预训练权重: USF-MAE pretrained/USF-MAE_full_pretrain_43dataset_100epochs.pt
+2026-04-04 13:30:38 - cardiac_classifier_7classes - INFO -   类别数: 7
+2026-04-04 13:30:38 - cardiac_classifier_7classes - INFO -   冻结backbone: False
+2026-04-04 13:30:38 - cardiac_classifier_7classes - INFO -   Dropout: 0.1
+2026-04-04 13:30:38 - cardiac_classifier_7classes - INFO - 
+训练配置:
+2026-04-04 13:30:38 - cardiac_classifier_7classes - INFO -   Epochs: 50
+2026-04-04 13:30:38 - cardiac_classifier_7classes - INFO -   学习率: 0.0001
+2026-04-04 13:30:38 - cardiac_classifier_7classes - INFO -   权重衰减: 0.01
+2026-04-04 13:30:38 - cardiac_classifier_7classes - INFO -   调度器: cosine
+2026-04-04 13:30:38 - cardiac_classifier_7classes - INFO -   混合精度: True
+2026-04-04 13:30:38 - cardiac_classifier_7classes - INFO -   梯度裁剪: 1.0
+2026-04-04 13:30:38 - cardiac_classifier_7classes - INFO -   早停耐心: 10
+2026-04-04 13:30:38 - cardiac_classifier_7classes - INFO - 配置已保存至: logs\cardiac_classifier_7classes\config.json
+2026-04-04 13:30:38 - cardiac_classifier_7classes - INFO - 数据集验证通过
+2026-04-04 13:30:38 - cardiac_classifier_7classes - INFO - 
+类别权重: [0.90465194 1.1005787  1.1515363  1.1165253  1.1152008  1.0582106
+ 0.7245024 ]
+2026-04-04 13:30:38 - cardiac_classifier_7classes - INFO - 数据集信息:
+  train_samples: 32904
+  val_samples: 7050
+  test_samples: 7050
+  num_classes: 7
+  class_names: ['A4C', 'PL', 'PSAV', 'PSMV', 'Random', 'SC', 'A2C']
+
+2026-04-04 13:30:38 - cardiac_classifier_7classes - INFO - 
+训练配置:
+2026-04-04 13:30:38 - cardiac_classifier_7classes - INFO -   训练模式: 5折交叉验证
+2026-04-04 13:30:38 - cardiac_classifier_7classes - INFO -   分层采样: True
+2026-04-04 13:30:38 - cardiac_classifier_7classes - INFO -   保存所有折: True
+2026-04-04 13:30:38 - cardiac_classifier_7classes - INFO -   KFold模型目录: checkpoints\kfold
+2026-04-04 13:30:39 - cardiac_classifier_7classes - INFO - 
+开始5折交叉验证，共47004个样本
+2026-04-04 13:30:39 - cardiac_classifier_7classes - INFO - 
+============================================================
+2026-04-04 13:30:39 - cardiac_classifier_7classes - INFO - 5折交叉验证 - Fold 1/5
+2026-04-04 13:30:39 - cardiac_classifier_7classes - INFO - ============================================================
+2026-04-04 13:30:39 - cardiac_classifier_7classes - INFO - 训练集: 37603样本, 验证集: 9401样本
+2026-04-04 15:35:23 - cardiac_classifier_7classes - INFO - Fold 1完成! Val Acc: 98.94%
+2026-04-04 15:35:23 - cardiac_classifier_7classes - INFO - 
+============================================================
+2026-04-04 15:35:23 - cardiac_classifier_7classes - INFO - 5折交叉验证 - Fold 2/5
+2026-04-04 15:35:23 - cardiac_classifier_7classes - INFO - ============================================================
+2026-04-04 15:35:23 - cardiac_classifier_7classes - INFO - 训练集: 37603样本, 验证集: 9401样本
+2026-04-04 19:01:51 - cardiac_classifier_7classes - INFO - Fold 2完成! Val Acc: 99.15%
+2026-04-04 19:01:51 - cardiac_classifier_7classes - INFO - 
+============================================================
+2026-04-04 19:01:51 - cardiac_classifier_7classes - INFO - 5折交叉验证 - Fold 3/5
+2026-04-04 19:01:51 - cardiac_classifier_7classes - INFO - ============================================================
+2026-04-04 19:01:51 - cardiac_classifier_7classes - INFO - 训练集: 37603样本, 验证集: 9401样本
+2026-04-04 23:10:42 - cardiac_classifier_7classes - INFO - Fold 3完成! Val Acc: 99.39%
+2026-04-04 23:10:42 - cardiac_classifier_7classes - INFO - 
+============================================================
+2026-04-04 23:10:42 - cardiac_classifier_7classes - INFO - 5折交叉验证 - Fold 4/5
+2026-04-04 23:10:42 - cardiac_classifier_7classes - INFO - ============================================================
+2026-04-04 23:10:42 - cardiac_classifier_7classes - INFO - 训练集: 37603样本, 验证集: 9401样本
+2026-04-05 01:35:34 - cardiac_classifier_7classes - INFO - Fold 4完成! Val Acc: 99.04%
+2026-04-05 01:35:34 - cardiac_classifier_7classes - INFO - 
+============================================================
+2026-04-05 01:35:34 - cardiac_classifier_7classes - INFO - 5折交叉验证 - Fold 5/5
+2026-04-05 01:35:34 - cardiac_classifier_7classes - INFO - ============================================================
+2026-04-05 01:35:34 - cardiac_classifier_7classes - INFO - 训练集: 37604样本, 验证集: 9400样本
+2026-04-05 05:36:04 - cardiac_classifier_7classes - INFO - Fold 5完成! Val Acc: 99.13%
+2026-04-05 05:36:05 - cardiac_classifier_7classes - INFO - 
+============================================================
+2026-04-05 05:36:05 - cardiac_classifier_7classes - INFO - 5折交叉验证结果汇总
+2026-04-05 05:36:05 - cardiac_classifier_7classes - INFO - ============================================================
+2026-04-05 05:36:05 - cardiac_classifier_7classes - INFO - Fold 1: Val Acc = 98.94%
+2026-04-05 05:36:05 - cardiac_classifier_7classes - INFO - Fold 2: Val Acc = 99.15%
+2026-04-05 05:36:05 - cardiac_classifier_7classes - INFO - Fold 3: Val Acc = 99.39% ★
+2026-04-05 05:36:05 - cardiac_classifier_7classes - INFO - Fold 4: Val Acc = 99.04%
+2026-04-05 05:36:05 - cardiac_classifier_7classes - INFO - Fold 5: Val Acc = 99.13%
+2026-04-05 05:36:05 - cardiac_classifier_7classes - INFO - 平均准确率: 99.13% ± 0.15%
+2026-04-05 05:36:05 - cardiac_classifier_7classes - INFO - 最佳折: Fold 3 (99.39%)
+2026-04-05 05:36:05 - cardiac_classifier_7classes - INFO - ✓ 最佳模型: kfold/fold_3.pth
+2026-04-05 05:36:05 - cardiac_classifier_7classes - INFO - ✓ 已复制到: kfold/best.pth
+2026-04-05 05:36:05 - cardiac_classifier_7classes - INFO - 结果已保存: checkpoints\kfold\kfold_results.json
+2026-04-05 05:36:05 - cardiac_classifier_7classes - INFO - 实验完成，日志保存于: logs\cardiac_classifier_7classes
+2026-04-05 05:36:05 - cardiac_classifier_7classes - INFO - 
+训练完成!
+2026-04-05 05:36:05 - cardiac_classifier_7classes - INFO - 实验完成，日志保存于: logs\cardiac_classifier_7classes
