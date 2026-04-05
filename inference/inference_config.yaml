@@ -10,8 +10,8 @@ batch_size: 32
 device: "cuda"
 
 # 输入输出
-input: null            # 单图路径 (可选)
-input_dir: null        # 图像目录路径 (可选)
+input: ~            # 单图路径 (可选)
+input_dir: ~        # 图像目录路径 (可选)
 output: "inference_results.json"
 
 # 搜索配置

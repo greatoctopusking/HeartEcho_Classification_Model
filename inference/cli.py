@@ -32,7 +32,7 @@ def parse_args():
     parser.add_argument(
         '--checkpoint', '-c',
         type=str,
-        required=True,
+        required=False,
         help='模型权重文件路径'
     )
     
@@ -109,6 +109,7 @@ def load_config(config_path: str) -> dict:
 def main():
     args = parse_args()
     
+    # 先加载配置文件（如果提供）
     if args.config:
         config = load_config(args.config)
         args.checkpoint = config.get('checkpoint', args.checkpoint)
@@ -120,8 +121,11 @@ def main():
         args.device = config.get('device', args.device)
         args.recursive = config.get('recursive', args.recursive)
     
+    # 优先级：命令行参数 > 配置文件 > 默认值
+    # 如果 checkpoint 仍为空，报错
     if not args.checkpoint:
         print("Error: --checkpoint is required")
+        print("  Use: --checkpoint <path> or --config <yaml>")
         sys.exit(1)
     
     if not os.path.exists(args.checkpoint):
