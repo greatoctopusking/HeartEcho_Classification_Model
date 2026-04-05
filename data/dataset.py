@@ -381,6 +381,64 @@ def create_subsample_dataset(
     return Subset(dataset, selected_indices)
 
 
+def create_full_data_loader(
+    cactus_data_root: str,
+    camus_data_root: Optional[str] = None,
+    batch_size: int = 32,
+    num_workers: int = 4,
+    img_size: int = 224
+) -> Tuple[DataLoader, Dict]:
+    """
+    创建包含全部数据的DataLoader（无划分），用于评估kfold模型
+    
+    Args:
+        cactus_data_root: CACTUS 数据集根目录
+        camus_data_root: CAMUS 数据集根目录（可选）
+        batch_size: 批大小
+        num_workers: 数据加载线程数
+        img_size: 图像尺寸
+    
+    Returns:
+        (data_loader, class_counts_dict)
+    """
+    all_paths = []
+    all_labels = []
+    
+    cactus_paths, cactus_labels = get_cactus_data_info(cactus_data_root)
+    all_paths.extend(cactus_paths)
+    all_labels.extend(cactus_labels)
+    
+    if camus_data_root and os.path.exists(camus_data_root):
+        camus_paths, camus_labels = get_camus_data_info(camus_data_root)
+        all_paths.extend(camus_paths)
+        all_labels.extend(camus_labels)
+    else:
+        print("警告: CAMUS 数据集未找到，仅使用 CACTUS 数据集")
+    
+    total_samples = len(all_paths)
+    print(f"全数据集总样本数: {total_samples}")
+    
+    transform = get_val_transforms(img_size)
+    full_dataset = CardiacDataset(
+        image_paths=all_paths,
+        labels=all_labels,
+        transform=transform
+    )
+    
+    class_counts = full_dataset.get_class_counts()
+    class_counts_dict = {ALL_CLASS_NAMES[i]: int(class_counts[i]) for i in range(len(ALL_CLASS_NAMES))}
+    
+    data_loader = DataLoader(
+        full_dataset,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=num_workers,
+        pin_memory=True
+    )
+    
+    return data_loader, class_counts_dict
+
+
 if __name__ == '__main__':
     cactus_root = 'CACTUS/Images Dataset'
     camus_root = 'CAMUS'

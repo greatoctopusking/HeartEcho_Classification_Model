@@ -6,6 +6,7 @@
     python eval.py --checkpoint checkpoints/best_model.pth --data "CACTUS/Images Dataset"
     python eval.py --checkpoint checkpoints/best_model.pth --test_only
     python eval.py --checkpoint checkpoints/best_model.pth --plot_cm --plot_roc
+    python eval.py --checkpoint checkpoints/kfold/best.pth --full_data --plot_cm --plot_roc
 """
 
 import os
@@ -15,7 +16,7 @@ import torch
 import yaml
 from pathlib import Path
 
-from data import get_data_loaders
+from data import get_data_loaders, create_full_data_loader
 from models import load_model_with_pretrained
 from utils import Evaluator, compute_metrics, print_metrics, save_metrics
 
@@ -138,6 +139,12 @@ def parse_args():
         help='评估指定折的模型 (0=默认best模型)'
     )
     
+    parser.add_argument(
+        '--full_data', 
+        action='store_true',
+        help='使用全部数据进行评估（无划分），适合kfold模型'
+    )
+    
     return parser.parse_args()
 
 
@@ -177,21 +184,32 @@ def main():
     
     os.makedirs(args.save_dir, exist_ok=True)
     
-    print("加载数据集...")
-    train_loader, val_loader, test_loader = get_data_loaders(
-        cactus_data_root=args.data,
-        camus_data_root=args.camus_data if os.path.exists(args.camus_data) else None,
-        batch_size=args.batch_size,
-        num_workers=args.num_workers,
-        val_split=args.val_split,
-        test_split=args.test_split,
-        random_seed=42
-    )
-    
-    print(f"数据集加载完成:")
-    print(f"  训练集: {len(train_loader.dataset)} 样本")
-    print(f"  验证集: {len(val_loader.dataset)} 样本")
-    print(f"  测试集: {len(test_loader.dataset)} 样本")
+    if args.full_data:
+        print("使用全部数据进行评估...")
+        data_loader, class_counts = create_full_data_loader(
+            cactus_data_root=args.data,
+            camus_data_root=args.camus_data if os.path.exists(args.camus_data) else None,
+            batch_size=args.batch_size,
+            num_workers=args.num_workers
+        )
+        print(f"全数据集样本数: {len(data_loader.dataset)}")
+        print(f"类别分布: {class_counts}")
+    else:
+        print("加载数据集...")
+        train_loader, val_loader, test_loader = get_data_loaders(
+            cactus_data_root=args.data,
+            camus_data_root=args.camus_data if os.path.exists(args.camus_data) else None,
+            batch_size=args.batch_size,
+            num_workers=args.num_workers,
+            val_split=args.val_split,
+            test_split=args.test_split,
+            random_seed=42
+        )
+        
+        print(f"数据集加载完成:")
+        print(f"  训练集: {len(train_loader.dataset)} 样本")
+        print(f"  验证集: {len(val_loader.dataset)} 样本")
+        print(f"  测试集: {len(test_loader.dataset)} 样本")
     
     print(f"\n加载模型: {args.checkpoint}")
     checkpoint = torch.load(args.checkpoint, map_location=device)
@@ -221,7 +239,24 @@ def main():
         class_names=CLASS_NAMES
     )
     
-    if args.test_only:
+    if args.full_data:
+        print("\n在全数据集上评估...")
+        metrics = evaluator.evaluate(data_loader)
+        print_metrics(metrics)
+        save_metrics(metrics, os.path.join(args.save_dir, 'full_metrics.json'))
+        
+        if args.plot_cm:
+            evaluator.plot_confusion_matrix(
+                data_loader,
+                save_path=os.path.join(args.save_dir, 'full_confusion_matrix.png')
+            )
+        
+        if args.plot_roc:
+            evaluator.plot_roc_curves(
+                data_loader,
+                save_path=os.path.join(args.save_dir, 'full_roc_curves.png')
+            )
+    elif args.test_only:
         print("\n在测试集上评估...")
         test_metrics = evaluator.evaluate(test_loader)
         print_metrics(test_metrics)

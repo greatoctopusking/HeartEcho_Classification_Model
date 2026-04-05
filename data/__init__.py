@@ -1,4 +1,4 @@
-from .dataset import CardiacDataset, get_data_loaders
+from .dataset import CardiacDataset, get_data_loaders, create_full_data_loader
 from .camus_loader import (
     get_camus_data_info,
     clear_cache,
@@ -10,6 +10,7 @@ from .camus_loader import (
 __all__ = [
     'CardiacDataset', 
     'get_data_loaders',
+    'create_full_data_loader',
     'get_camus_data_info',
     'clear_cache',
     'get_cache_status',
