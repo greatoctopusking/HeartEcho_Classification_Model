@@ -20,9 +20,50 @@ python -m inference --checkpoint checkpoints/best_model.pth --input image.jpg
 
 ---
 
-## 2 配置说明
+## 2 环境配置
 
-### 2.1 inference_config.yaml
+### 2.1 依赖安装
+
+```bash
+pip install -r requirements.txt
+```
+
+### 2.2 依赖列表
+
+| 依赖 | 版本 | 说明 |
+|------|------|------|
+| torch | ≥1.8.0 | PyTorch 深度学习框架 |
+| torchvision | ≥0.9.0 | 图像处理工具 |
+| Pillow | ≥8.0.0 | Python 图像库 |
+| numpy | ≥1.19.0 | 数值计算 |
+| PyYAML | ≥5.4.0 | YAML 配置文件解析 |
+| nibabel | ≥3.2.0 | NIfTI 医学图像解析 |
+
+### 2.3 运行环境
+
+- **操作系统**：Windows / Linux / macOS
+- **Python 版本**：3.8+
+- **GPU**：NVIDIA GPU (CUDA) / CPU
+
+### 2.4 目录结构
+
+```
+inference/
+├── __init__.py
+├── __main__.py           # 入口文件
+├── cli.py               # 命令行接口
+├── predict.py           # 推理核心
+├── classifier.py        # 分类模型
+├── transforms.py       # 数据预处理
+├── constants.py        # 常量定义
+└── inference_config.yaml # 配置文件
+```
+
+---
+
+## 3 配置说明
+
+### 3.1 inference_config.yaml
 
 | 参数 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
@@ -38,15 +79,15 @@ python -m inference --checkpoint checkpoints/best_model.pth --input image.jpg
 
 **注意：** YAML 中使用 `~` 表示 null，不要使用 `null`
 
-### 2.2 参数优先级
+### 3.2 参数优先级
 
 命令行参数 > 配置文件 > 默认值
 
 ---
 
-## 3 使用示例
+## 4 使用示例
 
-### 3.1 单张图像推理
+### 4.1 单张图像推理
 
 ```bash
 python -m inference \
@@ -54,32 +95,7 @@ python -m inference \
     --input "CACTUS/Images Dataset/A4C/1_D15_frame_600_v2.jpg"
 ```
 
-输出：
-
-```
-Using device: cuda
-Loading model from checkpoints/kfold/best.pth...
-Model loaded successfully
-
-Predicting single image: CACTUS/Images Dataset/A4C/1_D15_frame_600_v2.jpg
-
-Result:
-  Predicted Class: A4C
-  Confidence: 99.87%
-
-All probabilities:
-  A4C: 99.87%
-  PL: 0.08%
-  PSAV: 0.02%
-  PSMV: 0.01%
-  Random: 0.01%
-  SC: 0.01%
-  A2C: 0.00%
-
-Result saved to inference_results.json
-```
-
-### 3.2 批量图像推理
+### 4.2 批量图像推理
 
 ```bash
 python -m inference \
@@ -87,7 +103,7 @@ python -m inference \
     --input-dir "CACTUS/Images Dataset/A4C/"
 ```
 
-### 3.3 输出文件
+### 4.3 输出文件
 
 `inference_results.json` 格式：
 
@@ -132,9 +148,9 @@ python -m inference \
 
 ---
 
-## 4 Python API
+## 5 Python API
 
-### 4.1 基本用法
+### 5.1 基本用法
 
 ```python
 import torch
@@ -163,7 +179,7 @@ print(result['predicted_class'])
 print(result['confidence'])
 ```
 
-### 4.2 批量推理
+### 5.2 批量推理
 
 ```python
 from inference.predict import predict_directory
@@ -180,7 +196,7 @@ print(output['class_distribution'])
 
 ---
 
-## 5 支持的图像格式
+## 6 支持的图像格式
 
 - JPEG (.jpg, .jpeg)
 - PNG (.png)
@@ -190,7 +206,7 @@ print(output['class_distribution'])
 
 ---
 
-## 6 注意事项
+## 7 注意事项
 
 1. **模型类别匹配**：确保模型类别数与配置文件 `num_classes` 匹配
 2. **设备选择**：无 CUDA 时自动使用 CPU
@@ -199,5 +215,5 @@ print(output['class_distribution'])
 
 ---
 
-*文档版本：v1.0*  
+*文档版本：v1.1*  
 *最后更新：2026.4.5*
