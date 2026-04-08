@@ -10,21 +10,22 @@ img_size: 224
 pretrained: "USF-MAE pretrained/USF-MAE_full_pretrain_43dataset_100epochs.pt"
 num_classes: 7
 freeze_backbone: false
-dropout: 0.1
+dropout: 0.3
 
 # 训练配置
 batch_size: 32
-epochs: 500
+epochs: 50
 use_amp: true
 gradient_clip: 1.0
 early_stopping_patience: 10
 kfold: 0
 kfold_save_all: true
 stratified: true
+label_smoothing: 0.1
 
 # 优化器配置
 lr: 0.0001
-weight_decay: 0.01
+weight_decay: 0.05
 
 # 学习率调度器配置
 scheduler: "cosine"

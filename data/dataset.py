@@ -42,7 +42,6 @@ def get_train_transforms(image_size: int = 224) -> transforms.Compose:
             ratio=(0.75, 1.333)
         ),
         transforms.RandomHorizontalFlip(p=0.5),
-        transforms.RandomVerticalFlip(p=0.5),
         transforms.RandomRotation(degrees=(-15, 15)),
         transforms.ColorJitter(
             brightness=0.2,
