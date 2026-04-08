@@ -156,6 +156,17 @@ def generate_cache(data_root: str, force: bool = False) -> bool:
         
         patient_id = patient_dir.name
         
+        half_sequence_2ch = patient_dir / f"{patient_id}_2CH_half_sequence.nii.gz"
+        half_sequence_4ch = patient_dir / f"{patient_id}_4CH_half_sequence.nii.gz"
+        
+        has_2ch = half_sequence_2ch.exists()
+        has_4ch = half_sequence_4ch.exists()
+        
+        if not has_2ch and not has_4ch:
+            continue
+        
+        patient_processed = False
+        
         for view_type in ['2CH', '4CH']:
             half_sequence_file = patient_dir / f"{patient_id}_{view_type}_half_sequence.nii.gz"
             
@@ -194,7 +205,9 @@ def generate_cache(data_root: str, force: bool = False) -> bool:
                     else:
                         frame_count_4ch += 1
                 
-                patient_count += 1
+                if not patient_processed:
+                    patient_count += 1
+                    patient_processed = True
                 
                 if patient_count % 100 == 0:
                     print(f"已处理 {patient_count} 个患者, 2CH:{frame_count_2ch} 帧, 4CH:{frame_count_4ch} 帧")
