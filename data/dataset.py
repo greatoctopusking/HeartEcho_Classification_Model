@@ -28,6 +28,24 @@ GRAY_MEAN = [0.485]
 GRAY_STD = [0.229]
 
 
+class PreprocessCactusTransform:
+    """CACTUS图像预处理 - 可pickle的自定义transform类"""
+    def __init__(self, target_size: int = 224):
+        self.target_size = target_size
+    
+    def __call__(self, img: Image.Image) -> Image.Image:
+        return preprocess_cactus_image(img, self.target_size)
+
+
+class PreprocessImageTransform:
+    """统一图像预处理 - 可pickle的自定义transform类"""
+    def __init__(self, target_size: int = 224):
+        self.target_size = target_size
+    
+    def __call__(self, img: Image.Image) -> Image.Image:
+        return preprocess_image(img, "", self.target_size)
+
+
 def preprocess_cactus_image(img: Image.Image, target_size: int = 224) -> Image.Image:
     """
     CACTUS 图像预处理:
@@ -108,7 +126,7 @@ def get_train_transforms(image_size: int = 224, use_gray: bool = True) -> transf
     """
     if use_gray:
         return transforms.Compose([
-            transforms.Lambda(lambda img: preprocess_image(img, "", image_size)),
+            PreprocessImageTransform(image_size),
             transforms.RandomResizedCrop(
                 image_size,
                 scale=(0.7, 1.0),
@@ -152,7 +170,7 @@ def get_val_transforms(image_size: int = 224, use_gray: bool = True) -> transfor
     """
     if use_gray:
         return transforms.Compose([
-            transforms.Lambda(lambda img: preprocess_image(img, "", image_size)),
+            PreprocessImageTransform(image_size),
             transforms.ToTensor(),
             transforms.Normalize(mean=GRAY_MEAN, std=GRAY_STD)
         ])
