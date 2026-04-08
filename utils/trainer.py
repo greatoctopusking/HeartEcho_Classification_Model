@@ -94,7 +94,7 @@ class Trainer:
             self.optimizer.zero_grad()
             
             if self.use_amp:
-                with torch.cuda.amp.autocast():
+                with torch.amp.autocast('cuda'):
                     outputs = self.model(images)
                     loss = self.criterion(outputs, labels)
                 
