@@ -550,18 +550,18 @@ def run_kfold_training(args, logger, class_weights, device, train_loader, val_lo
         optimizer = create_optimizer(model, optimizer_config)
         scheduler = create_scheduler(optimizer, {'type': args.scheduler, 'T_max': args.epochs, 'eta_min': args.lr * 0.01})
         
-    criterion = torch.nn.CrossEntropyLoss(weight=class_weights.to(device), label_smoothing=args.label_smoothing)
-    
-    fold_checkpoint_dir = kfold_dir
-    trainer = Trainer(
-        model=model, train_loader=train_loader, val_loader=val_loader,
-        criterion=criterion, optimizer=optimizer, scheduler=scheduler,
-        device=device, checkpoint_dir=fold_checkpoint_dir, logger=logger,
-        use_amp=args.use_amp, gradient_clip=args.gradient_clip if args.gradient_clip > 0 else None,
-        early_stopping_patience=args.early_stopping_patience
-    )
-    
-    history = trainer.train(num_epochs=args.epochs, save_best=True, save_last=False, save_frequency=0)
+        criterion = torch.nn.CrossEntropyLoss(weight=class_weights.to(device), label_smoothing=args.label_smoothing)
+        
+        fold_checkpoint_dir = kfold_dir
+        trainer = Trainer(
+            model=model, train_loader=train_loader, val_loader=val_loader,
+            criterion=criterion, optimizer=optimizer, scheduler=scheduler,
+            device=device, checkpoint_dir=fold_checkpoint_dir, logger=logger,
+            use_amp=args.use_amp, gradient_clip=args.gradient_clip if args.gradient_clip > 0 else None,
+            early_stopping_patience=args.early_stopping_patience
+        )
+        
+        history = trainer.train(num_epochs=args.epochs, save_best=True, save_last=False, save_frequency=0)
     
     val_acc = trainer.best_val_acc
     fold_results.append({

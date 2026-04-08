@@ -81,7 +81,7 @@ def preprocess_cactus_image(img: Image.Image, target_size: int = 224) -> Image.I
     paste_y = (target_size - new_h) // 2
     result.paste(img, (0, paste_y))
     
-    return result
+    return result.convert('RGB')
 
 
 def preprocess_image(img: Image.Image, img_path: str, target_size: int = 224) -> Image.Image:
@@ -108,7 +108,7 @@ def preprocess_image(img: Image.Image, img_path: str, target_size: int = 224) ->
         result = Image.new('L', (target_size, target_size), 0)
         paste_y = (target_size - new_h) // 2
         result.paste(img, (0, paste_y))
-        return result
+        return result.convert('RGB')
     else:
         return preprocess_cactus_image(img, target_size)
 
@@ -135,7 +135,7 @@ def get_train_transforms(image_size: int = 224, use_gray: bool = True) -> transf
             transforms.RandomHorizontalFlip(p=0.5),
             transforms.RandomRotation(degrees=(-15, 15)),
             transforms.ToTensor(),
-            transforms.Normalize(mean=GRAY_MEAN, std=GRAY_STD)
+            transforms.Normalize(mean=IMAGENET_MEAN, std=IMAGENET_STD)
         ])
     else:
         return transforms.Compose([
@@ -172,7 +172,7 @@ def get_val_transforms(image_size: int = 224, use_gray: bool = True) -> transfor
         return transforms.Compose([
             PreprocessImageTransform(image_size),
             transforms.ToTensor(),
-            transforms.Normalize(mean=GRAY_MEAN, std=GRAY_STD)
+            transforms.Normalize(mean=IMAGENET_MEAN, std=IMAGENET_STD)
         ])
     else:
         return transforms.Compose([
