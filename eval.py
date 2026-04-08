@@ -145,6 +145,19 @@ def parse_args():
         help='使用全部数据进行评估（无划分），适合kfold模型'
     )
     
+    parser.add_argument(
+        '--holdout_split', 
+        type=float, 
+        default=0.0,
+        help='保留测试集比例（用于最终验证）'
+    )
+    
+    parser.add_argument(
+        '--holdout_only', 
+        action='store_true',
+        help='仅在Holdout集上评估'
+    )
+    
     return parser.parse_args()
 
 
@@ -196,20 +209,23 @@ def main():
         print(f"类别分布: {class_counts}")
     else:
         print("加载数据集...")
-        train_loader, val_loader, test_loader = get_data_loaders(
+        train_loader, val_loader, test_loader, holdout_loader = get_data_loaders(
             cactus_data_root=args.data,
             camus_data_root=args.camus_data if os.path.exists(args.camus_data) else None,
             batch_size=args.batch_size,
             num_workers=args.num_workers,
             val_split=args.val_split,
             test_split=args.test_split,
-            random_seed=42
+            random_seed=42,
+            holdout_split=args.holdout_split
         )
         
         print(f"数据集加载完成:")
         print(f"  训练集: {len(train_loader.dataset)} 样本")
         print(f"  验证集: {len(val_loader.dataset)} 样本")
         print(f"  测试集: {len(test_loader.dataset)} 样本")
+        if holdout_loader is not None:
+            print(f"  Holdout集: {len(holdout_loader.dataset)} 样本")
     
     print(f"\n加载模型: {args.checkpoint}")
     checkpoint = torch.load(args.checkpoint, map_location=device)
@@ -303,6 +319,12 @@ def main():
         print_metrics(val_metrics)
         save_metrics(val_metrics, os.path.join(args.save_dir, 'val_metrics.json'))
         
+        if holdout_loader is not None:
+            print("\n在Holdout集上评估...")
+            holdout_metrics = evaluator.evaluate(holdout_loader)
+            print_metrics(holdout_metrics)
+            save_metrics(holdout_metrics, os.path.join(args.save_dir, 'holdout_metrics.json'))
+        
         if args.plot_cm:
             evaluator.plot_confusion_matrix(
                 test_loader,
@@ -312,11 +334,34 @@ def main():
                 val_loader,
                 save_path=os.path.join(args.save_dir, 'val_confusion_matrix.png')
             )
+            if holdout_loader is not None:
+                evaluator.plot_confusion_matrix(
+                    holdout_loader,
+                    save_path=os.path.join(args.save_dir, 'holdout_confusion_matrix.png')
+                )
         
         if args.plot_roc:
             evaluator.plot_roc_curves(
                 test_loader,
                 save_path=os.path.join(args.save_dir, 'test_roc_curves.png')
+            )
+    
+    if args.holdout_only and holdout_loader is not None:
+        print("\n在Holdout集上评估...")
+        holdout_metrics = evaluator.evaluate(holdout_loader)
+        print_metrics(holdout_metrics)
+        save_metrics(holdout_metrics, os.path.join(args.save_dir, 'holdout_metrics.json'))
+        
+        if args.plot_cm:
+            evaluator.plot_confusion_matrix(
+                holdout_loader,
+                save_path=os.path.join(args.save_dir, 'holdout_confusion_matrix.png')
+            )
+        
+        if args.plot_roc:
+            evaluator.plot_roc_curves(
+                holdout_loader,
+                save_path=os.path.join(args.save_dir, 'holdout_roc_curves.png')
             )
     
     print("\n" + "=" * 60)

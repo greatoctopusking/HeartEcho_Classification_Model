@@ -242,6 +242,13 @@ def parse_args():
         help='显式使用简单划分模式（不使用kfold）'
     )
     
+    parser.add_argument(
+        '--holdout_split', 
+        type=float, 
+        default=0.0,
+        help='保留测试集比例（用于最终验证，不参与训练）'
+    )
+    
     return parser.parse_args()
 
 
@@ -303,6 +310,7 @@ def main():
     logger.info(f"  CAMUS数据: {args.camus_data}")
     logger.info(f"  验证集比例: {args.val_split}")
     logger.info(f"  测试集比例: {args.test_split}")
+    logger.info(f"  Holdout比例: {args.holdout_split}")
     logger.info(f"  图像尺寸: {args.img_size}")
     logger.info(f"  批大小: {args.batch_size}")
     logger.info(f"  Workers: {args.num_workers}")
@@ -350,14 +358,15 @@ def main():
     
     print("\n加载数据集...")
     try:
-        train_loader, val_loader, test_loader = get_data_loaders(
+        train_loader, val_loader, test_loader, holdout_loader = get_data_loaders(
             cactus_data_root=args.cactus_data,
             camus_data_root=args.camus_data if os.path.exists(args.camus_data) else None,
             batch_size=args.batch_size,
             num_workers=args.num_workers,
             val_split=args.val_split,
             test_split=args.test_split,
-            random_seed=args.seed
+            random_seed=args.seed,
+            holdout_split=args.holdout_split
         )
         
         class_weights = train_loader.dataset.get_class_weights()
@@ -367,6 +376,7 @@ def main():
             'train_samples': len(train_loader.dataset),
             'val_samples': len(val_loader.dataset),
             'test_samples': len(test_loader.dataset),
+            'holdout_samples': len(holdout_loader.dataset) if holdout_loader else 0,
             'num_classes': args.num_classes,
             'class_names': CLASS_NAMES
         }
@@ -390,13 +400,13 @@ def main():
     if args.kfold > 0:
         run_kfold_training(args, logger, class_weights, device, train_loader, val_loader, data_info)
     else:
-        run_simple_training(args, logger, class_weights, device, train_loader, val_loader, test_loader)
+        run_simple_training(args, logger, class_weights, device, train_loader, val_loader, test_loader, holdout_loader)
     
     logger.info("\n训练完成!")
     logger.close()
 
 
-def run_simple_training(args, logger, class_weights, device, train_loader, val_loader, test_loader):
+def run_simple_training(args, logger, class_weights, device, train_loader, val_loader, test_loader, holdout_loader=None):
     """简单划分模式训练"""
     from models import load_model_with_pretrained, create_usfmae_backbone, CardiacClassifier
     from utils import create_optimizer, create_scheduler
@@ -435,9 +445,25 @@ def run_simple_training(args, logger, class_weights, device, train_loader, val_l
     
     logger.save_history(history)
     logger.info(f"\n训练完成! 最佳验证准确率: {trainer.best_val_acc:.2f}%")
+    
+    if holdout_loader is not None:
+        logger.info("\n在Holdout集上进行最终验证...")
+        model.eval()
+        correct = 0
+        total = 0
+        with torch.no_grad():
+            for images, labels in holdout_loader:
+                images = images.to(device)
+                labels = labels.to(device)
+                outputs = model(images)
+                _, predicted = torch.max(outputs.data, 1)
+                total += labels.size(0)
+                correct += (predicted == labels).sum().item()
+        holdout_acc = 100 * correct / total
+        logger.info(f"Holdout集准确率: {holdout_acc:.2f}%")
 
 
-def run_kfold_training(args, logger, class_weights, device, train_loader, val_loader, data_info):
+def run_kfold_training(args, logger, class_weights, device, train_loader, val_loader, data_info, holdout_loader=None):
     """K折交叉验证训练"""
     import json
     from sklearn.model_selection import KFold, StratifiedKFold
@@ -609,6 +635,29 @@ def run_kfold_training(args, logger, class_weights, device, train_loader, val_lo
     with open(results_path, 'w') as f:
         json.dump(kfold_results, f, indent=2)
     logger.info(f"结果已保存: {results_path}")
+    
+    if holdout_loader is not None:
+        logger.info("\n在Holdout集上进行最终验证...")
+        best_model_path = os.path.join(kfold_dir, 'best.pth')
+        checkpoint = torch.load(best_model_path, map_location=device)
+        model.load_state_dict(checkpoint['model_state_dict'])
+        model.eval()
+        correct = 0
+        total = 0
+        with torch.no_grad():
+            for images, labels in holdout_loader:
+                images = images.to(device)
+                labels = labels.to(device)
+                outputs = model(images)
+                _, predicted = torch.max(outputs.data, 1)
+                total += labels.size(0)
+                correct += (predicted == labels).sum().item()
+        holdout_acc = 100 * correct / total
+        logger.info(f"Holdout集准确率: {holdout_acc:.2f}%")
+        
+        kfold_results['holdout_acc'] = float(holdout_acc)
+        with open(results_path, 'w') as f:
+            json.dump(kfold_results, f, indent=2)
     
     logger.close()
 
