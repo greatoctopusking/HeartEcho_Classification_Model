@@ -11,7 +11,7 @@ import numpy as np
 from sklearn.model_selection import StratifiedShuffleSplit
 
 from .cactus_loader import get_cactus_data_info, CLASS_NAMES as CACTUS_CLASSES
-from .camus_loader import get_camus_data_info, CLASS_NAME as CAMUS_CLASS, CLASS_IDX as CAMUS_IDX
+from .camus_loader import get_camus_data_info
 
 
 ALL_CLASS_NAMES = ['A4C', 'PL', 'PSAV', 'PSMV', 'Random', 'SC', 'A2C']
@@ -24,51 +24,144 @@ IDX_TO_CLASS = {idx: name for idx, name in enumerate(ALL_CLASS_NAMES)}
 IMAGENET_MEAN = [0.485, 0.456, 0.406]
 IMAGENET_STD = [0.229, 0.224, 0.225]
 
+GRAY_MEAN = [0.485]
+GRAY_STD = [0.229]
 
-def get_train_transforms(image_size: int = 224) -> transforms.Compose:
+
+def preprocess_cactus_image(img: Image.Image, target_size: int = 224) -> Image.Image:
+    """
+    CACTUS 图像预处理:
+    1. 裁剪掉设备信息边框 (左15%, 右35%, 下25%)
+    2. 转灰度
+    3. Resize (保持宽高比)
+    4. Padding 到目标尺寸
+    
+    Args:
+        img: 输入的 PIL Image
+        target_size: 目标尺寸
+    
+    Returns:
+        处理后的 PIL Image (灰度, 224x224)
+    """
+    orig_w, orig_h = img.size
+    
+    left = int(orig_w * 0.15)
+    right = orig_w - int(orig_w * 0.35)
+    top = 0
+    bottom = orig_h - int(orig_h * 0.25)
+    crop_box = (left, top, right, bottom)
+    img = img.crop(crop_box)
+    crop_w, crop_h = img.size
+    
+    img = img.convert('L')
+    
+    new_w = target_size
+    new_h = int(crop_h * target_size / crop_w)
+    img = img.resize((new_w, new_h), Image.LANCZOS)
+    
+    result = Image.new('L', (target_size, target_size), 0)
+    paste_y = (target_size - new_h) // 2
+    result.paste(img, (0, paste_y))
+    
+    return result
+
+
+def preprocess_image(img: Image.Image, img_path: str, target_size: int = 224) -> Image.Image:
+    """
+    统一的图像预处理:
+    - CACTUS: 裁剪 + 转灰度 + Resize + Padding
+    - CAMUS: 已经是处理好的灰度图，只需 Resize + Padding
+    
+    Args:
+        img: 输入的 PIL Image
+        img_path: 图像路径，用于判断来源
+        target_size: 目标尺寸
+    
+    Returns:
+        处理后的 PIL Image (灰度, 224x224)
+    """
+    if '_camus_cache' in img_path or 'database_nifti' in img_path:
+        img = img.convert('L')
+        orig_w, orig_h = img.size
+        aspect_ratio = orig_w / orig_h
+        new_w = target_size
+        new_h = int(new_w / aspect_ratio)
+        img = img.resize((new_w, new_h), Image.LANCZOS)
+        result = Image.new('L', (target_size, target_size), 0)
+        paste_y = (target_size - new_h) // 2
+        result.paste(img, (0, paste_y))
+        return result
+    else:
+        return preprocess_cactus_image(img, target_size)
+
+
+def get_train_transforms(image_size: int = 224, use_gray: bool = True) -> transforms.Compose:
     """
     获取训练时的数据增强 transforms
     
     Args:
         image_size: 目标图像尺寸
+        use_gray: 是否使用灰度图 (CACTUS和CAMUS统一为灰度)
     
     Returns:
         训练数据增强的 transforms 组合
     """
-    return transforms.Compose([
-        transforms.RandomResizedCrop(
-            image_size,
-            scale=(0.7, 1.0),
-            ratio=(0.75, 1.333)
-        ),
-        transforms.RandomHorizontalFlip(p=0.5),
-        transforms.RandomRotation(degrees=(-15, 15)),
-        transforms.ColorJitter(
-            brightness=0.2,
-            contrast=0.2,
-            saturation=0.1,
-            hue=0.05
-        ),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=IMAGENET_MEAN, std=IMAGENET_STD)
-    ])
+    if use_gray:
+        return transforms.Compose([
+            transforms.Lambda(lambda img: preprocess_image(img, "", image_size)),
+            transforms.RandomResizedCrop(
+                image_size,
+                scale=(0.7, 1.0),
+                ratio=(0.75, 1.333)
+            ),
+            transforms.RandomHorizontalFlip(p=0.5),
+            transforms.RandomRotation(degrees=(-15, 15)),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=GRAY_MEAN, std=GRAY_STD)
+        ])
+    else:
+        return transforms.Compose([
+            transforms.RandomResizedCrop(
+                image_size,
+                scale=(0.7, 1.0),
+                ratio=(0.75, 1.333)
+            ),
+            transforms.RandomHorizontalFlip(p=0.5),
+            transforms.RandomRotation(degrees=(-15, 15)),
+            transforms.ColorJitter(
+                brightness=0.2,
+                contrast=0.2,
+                saturation=0.1,
+                hue=0.05
+            ),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=IMAGENET_MEAN, std=IMAGENET_STD)
+        ])
 
 
-def get_val_transforms(image_size: int = 224) -> transforms.Compose:
+def get_val_transforms(image_size: int = 224, use_gray: bool = True) -> transforms.Compose:
     """
     获取验证/测试时的 transforms (无数据增强)
     
     Args:
         image_size: 目标图像尺寸
+        use_gray: 是否使用灰度图
     
     Returns:
         验证数据的 transforms 组合
     """
-    return transforms.Compose([
-        transforms.Resize((image_size, image_size)),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=IMAGENET_MEAN, std=IMAGENET_STD)
-    ])
+    if use_gray:
+        return transforms.Compose([
+            transforms.Lambda(lambda img: preprocess_image(img, "", image_size)),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=GRAY_MEAN, std=GRAY_STD)
+        ])
+    else:
+        return transforms.Compose([
+            transforms.Resize((image_size, image_size)),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=IMAGENET_MEAN, std=IMAGENET_STD)
+        ])
 
 
 class CardiacDataset(Dataset):
@@ -120,10 +213,11 @@ class CardiacDataset(Dataset):
         label = torch.tensor(self.labels[idx], dtype=torch.long)
         
         try:
-            image = Image.open(img_path).convert('RGB')
+            image = Image.open(img_path)
+            image = preprocess_image(image, img_path, target_size=224)
         except Exception as e:
             print(f"警告: 无法加载图像 {img_path}: {e}")
-            image = Image.new('RGB', (224, 224), color='black')
+            image = Image.new('L', (224, 224), color=0)
         
         if self.transform is not None:
             image = self.transform(image)
@@ -174,7 +268,8 @@ def combine_datasets(
     val_split: float = 0.15,
     test_split: float = 0.15,
     random_seed: int = 42,
-    stratified: bool = True
+    stratified: bool = True,
+    holdout_split: float = 0.0
 ) -> Tuple[Dataset, Dataset, Dataset]:
     """
     合并 CACTUS 和 CAMUS 数据集，并划分为训练/验证/测试集
@@ -186,6 +281,7 @@ def combine_datasets(
         test_split: 测试集比例
         random_seed: 随机种子
         stratified: 是否使用分层采样
+        holdout_split: 保留测试集比例（用于最终验证，不参与训练）
     
     Returns:
         (train_dataset, val_dataset, test_dataset)
@@ -211,43 +307,97 @@ def combine_datasets(
     print(f"合并后总样本数: {total_samples}")
     
     all_labels = np.array(all_labels)
+    all_paths = np.array(all_paths, dtype=object)
     
-    test_size = int(total_samples * test_split)
-    val_size = int(total_samples * val_split)
-    
-    if stratified:
-        sss = StratifiedShuffleSplit(n_splits=1, test_size=test_size + val_size, random_state=random_seed)
-        train_idx, test_val_idx = next(sss.split(all_paths, all_labels))
+    if holdout_split > 0:
+        holdout_size = int(total_samples * holdout_split)
+        sss = StratifiedShuffleSplit(n_splits=1, test_size=holdout_size, random_state=random_seed)
+        train_val_idx, holdout_idx = next(sss.split(all_paths, all_labels))
         
-        train_paths = [all_paths[i] for i in train_idx]
-        train_labels = [all_labels[i] for i in train_idx]
+        train_val_paths = all_paths[train_val_idx].tolist()
+        train_val_labels = all_labels[train_val_idx].tolist()
+        holdout_paths = all_paths[holdout_idx].tolist()
+        holdout_labels = all_labels[holdout_idx].tolist()
         
-        remaining_paths = [all_paths[i] for i in test_val_idx]
-        remaining_labels = [all_labels[i] for i in test_val_idx]
+        print(f"Hold-out 测试集: {len(holdout_paths)} 样本")
         
-        val_size_adjusted = int(len(remaining_paths) * (val_size / (test_size + val_size)))
+        train_val_labels = np.array(train_val_labels)
+        test_size = int(len(train_val_paths) * test_split)
+        val_size = int(len(train_val_paths) * val_split)
         
-        sss_val = StratifiedShuffleSplit(n_splits=1, test_size=val_size_adjusted, random_state=random_seed)
-        val_idx_final, test_idx_final = next(sss_val.split(remaining_paths, remaining_labels))
-        
-        val_paths = [remaining_paths[i] for i in val_idx_final]
-        val_labels = [remaining_labels[i] for i in val_idx_final]
-        test_paths = [remaining_paths[i] for i in test_idx_final]
-        test_labels = [remaining_labels[i] for i in test_idx_final]
+        if stratified:
+            sss = StratifiedShuffleSplit(n_splits=1, test_size=test_size + val_size, random_state=random_seed)
+            train_idx, test_val_idx = next(sss.split(train_val_paths, train_val_labels))
+            
+            train_paths = [train_val_paths[i] for i in train_idx]
+            train_labels = [train_val_labels[i] for i in train_idx]
+            
+            remaining_paths = [train_val_paths[i] for i in test_val_idx]
+            remaining_labels = [train_val_labels[i] for i in test_val_idx]
+            
+            val_size_adjusted = int(len(remaining_paths) * (val_size / (test_size + val_size)))
+            
+            sss_val = StratifiedShuffleSplit(n_splits=1, test_size=val_size_adjusted, random_state=random_seed)
+            val_idx_final, test_idx_final = next(sss_val.split(remaining_paths, remaining_labels))
+            
+            val_paths = [remaining_paths[i] for i in val_idx_final]
+            val_labels = [remaining_labels[i] for i in val_idx_final]
+            test_paths = [remaining_paths[i] for i in test_idx_final]
+            test_labels = [remaining_labels[i] for i in test_idx_final]
+        else:
+            indices = list(range(len(train_val_paths)))
+            random.shuffle(indices)
+            
+            test_indices = indices[:test_size]
+            val_indices = indices[test_size:test_size + val_size]
+            train_indices = indices[test_size + val_size:]
+            
+            train_paths = [train_val_paths[i] for i in train_indices]
+            train_labels = [train_val_labels[i] for i in train_indices]
+            val_paths = [train_val_paths[i] for i in val_indices]
+            val_labels = [train_val_labels[i] for i in val_indices]
+            test_paths = [train_val_paths[i] for i in test_indices]
+            test_labels = [train_val_labels[i] for i in test_indices]
     else:
-        indices = list(range(total_samples))
-        random.shuffle(indices)
+        test_size = int(total_samples * test_split)
+        val_size = int(total_samples * val_split)
         
-        test_indices = indices[:test_size]
-        val_indices = indices[test_size:test_size + val_size]
-        train_indices = indices[test_size + val_size:]
+        if stratified:
+            sss = StratifiedShuffleSplit(n_splits=1, test_size=test_size + val_size, random_state=random_seed)
+            train_idx, test_val_idx = next(sss.split(all_paths, all_labels))
+            
+            train_paths = [all_paths[i] for i in train_idx]
+            train_labels = [all_labels[i] for i in train_idx]
+            
+            remaining_paths = [all_paths[i] for i in test_val_idx]
+            remaining_labels = [all_labels[i] for i in test_val_idx]
+            
+            val_size_adjusted = int(len(remaining_paths) * (val_size / (test_size + val_size)))
+            
+            sss_val = StratifiedShuffleSplit(n_splits=1, test_size=val_size_adjusted, random_state=random_seed)
+            val_idx_final, test_idx_final = next(sss_val.split(remaining_paths, remaining_labels))
+            
+            val_paths = [remaining_paths[i] for i in val_idx_final]
+            val_labels = [remaining_labels[i] for i in val_idx_final]
+            test_paths = [remaining_paths[i] for i in test_idx_final]
+            test_labels = [remaining_labels[i] for i in test_idx_final]
+        else:
+            indices = list(range(total_samples))
+            random.shuffle(indices)
+            
+            test_indices = indices[:test_size]
+            val_indices = indices[test_size:test_size + val_size]
+            train_indices = indices[test_size + val_size:]
+            
+            train_paths = [all_paths[i] for i in train_indices]
+            train_labels = [all_labels[i] for i in train_indices]
+            val_paths = [all_paths[i] for i in val_indices]
+            val_labels = [all_labels[i] for i in val_indices]
+            test_paths = [all_paths[i] for i in test_indices]
+            test_labels = [all_labels[i] for i in test_indices]
         
-        train_paths = [all_paths[i] for i in train_indices]
-        train_labels = [all_labels[i] for i in train_indices]
-        val_paths = [all_paths[i] for i in val_indices]
-        val_labels = [all_labels[i] for i in val_indices]
-        test_paths = [all_paths[i] for i in test_indices]
-        test_labels = [all_labels[i] for i in test_indices]
+        holdout_paths = []
+        holdout_labels = []
     
     train_transform = get_train_transforms()
     val_transform = get_val_transforms()
@@ -282,7 +432,16 @@ def combine_datasets(
         for i, class_name in enumerate(ALL_CLASS_NAMES):
             print(f"    {class_name}: {counts[i]}")
     
-    return train_dataset, val_dataset, test_dataset
+    holdout_dataset = None
+    if holdout_paths:
+        holdout_dataset = CardiacDataset(
+            image_paths=holdout_paths,
+            labels=holdout_labels,
+            transform=val_transform
+        )
+        print(f"  Hold-out集: {len(holdout_dataset)} 样本")
+    
+    return train_dataset, val_dataset, test_dataset, holdout_dataset
 
 
 def get_data_loaders(
@@ -292,8 +451,9 @@ def get_data_loaders(
     num_workers: int = 4,
     val_split: float = 0.15,
     test_split: float = 0.15,
-    random_seed: int = 42
-) -> Tuple[DataLoader, DataLoader, DataLoader]:
+    random_seed: int = 42,
+    holdout_split: float = 0.0
+) -> Tuple[DataLoader, DataLoader, DataLoader, Optional[DataLoader]]:
     """
     获取训练、验证、测试数据加载器
     
@@ -305,16 +465,18 @@ def get_data_loaders(
         val_split: 验证集比例
         test_split: 测试集比例
         random_seed: 随机种子
+        holdout_split: 保留测试集比例（用于最终验证，不参与训练）
     
     Returns:
-        (train_loader, val_loader, test_loader)
+        (train_loader, val_loader, test_loader, holdout_loader)
     """
-    train_dataset, val_dataset, test_dataset = combine_datasets(
+    train_dataset, val_dataset, test_dataset, holdout_dataset = combine_datasets(
         cactus_data_root=cactus_data_root,
         camus_data_root=camus_data_root,
         val_split=val_split,
         test_split=test_split,
-        random_seed=random_seed
+        random_seed=random_seed,
+        holdout_split=holdout_split
     )
     
     train_loader = DataLoader(
@@ -342,7 +504,17 @@ def get_data_loaders(
         pin_memory=True
     )
     
-    return train_loader, val_loader, test_loader
+    holdout_loader = None
+    if holdout_dataset is not None:
+        holdout_loader = DataLoader(
+            holdout_dataset,
+            batch_size=batch_size,
+            shuffle=False,
+            num_workers=num_workers,
+            pin_memory=True
+        )
+    
+    return train_loader, val_loader, test_loader, holdout_loader
 
 
 def create_subsample_dataset(

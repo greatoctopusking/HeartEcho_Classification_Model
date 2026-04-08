@@ -6,8 +6,13 @@ from typing import List, Tuple, Dict, Optional
 import numpy as np
 
 
-CLASS_NAME = 'A2C'
-CLASS_IDX = 6
+CLASS_NAME_2CH = 'A2C'
+CLASS_IDX_2CH = 6
+
+CLASS_NAME_4CH = 'A4C'
+CLASS_IDX_4CH = 0
+
+__all__ = ['CLASS_NAME_2CH', 'CLASS_IDX_2CH', 'CLASS_NAME_4CH', 'CLASS_IDX_4CH']
 
 CACHE_DIR_NAME = "_camus_cache"
 CACHE_METADATA_FILE = "cache_metadata.json"
@@ -93,15 +98,21 @@ def load_camus_from_cache(data_root: str) -> Tuple[List[str], List[int]]:
     labels = []
     
     for img_file in sorted(cache_images_dir.glob("*.png")):
+        filename = img_file.name
+        if '_2CH_' in filename:
+            labels.append(CLASS_IDX_2CH)
+        elif '_4CH_' in filename:
+            labels.append(CLASS_IDX_4CH)
+        else:
+            continue
         image_paths.append(str(img_file))
-        labels.append(CLASS_IDX)
     
     return image_paths, labels
 
 
 def generate_cache(data_root: str, force: bool = False) -> bool:
     """
-    生成CAMUS数据缓存
+    生成CAMUS数据缓存 (包括 2CH 和 4CH)
     
     Args:
         data_root: CAMUS数据集根目录
@@ -134,7 +145,8 @@ def generate_cache(data_root: str, force: bool = False) -> bool:
     print(f"找到 {len(patient_dirs)} 个患者目录")
     print(f"缓存目录: {cache_images_dir}")
     
-    frame_count = 0
+    frame_count_2ch = 0
+    frame_count_4ch = 0
     patient_count = 0
     failed_patients = []
     
@@ -143,54 +155,62 @@ def generate_cache(data_root: str, force: bool = False) -> bool:
             continue
         
         patient_id = patient_dir.name
-        half_sequence_file = patient_dir / f"{patient_id}_2CH_half_sequence.nii.gz"
         
-        if not half_sequence_file.exists():
-            continue
-        
-        try:
-            img = nib.load(str(half_sequence_file))
-            data = img.get_fdata()
+        for view_type in ['2CH', '4CH']:
+            half_sequence_file = patient_dir / f"{patient_id}_{view_type}_half_sequence.nii.gz"
             
-            if len(data.shape) == 3:
-                num_frames = data.shape[2]
-            elif len(data.shape) == 4:
-                num_frames = data.shape[3]
-            else:
+            if not half_sequence_file.exists():
                 continue
             
-            for frame_idx in range(num_frames):
+            try:
+                img = nib.load(str(half_sequence_file))
+                data = img.get_fdata()
+                
                 if len(data.shape) == 3:
-                    frame = data[:, :, frame_idx]
+                    num_frames = data.shape[2]
+                elif len(data.shape) == 4:
+                    num_frames = data.shape[3]
                 else:
-                    frame = data[:, :, 0, frame_idx]
+                    continue
                 
-                frame_normalized = ((frame - frame.min()) / (frame.max() - frame.min() + 1e-8) * 255).astype(np.uint8)
+                for frame_idx in range(num_frames):
+                    if len(data.shape) == 3:
+                        frame = data[:, :, frame_idx]
+                    else:
+                        frame = data[:, :, 0, frame_idx]
+                    
+                    frame_normalized = ((frame - frame.min()) / (frame.max() - frame.min() + 1e-8) * 255).astype(np.uint8)
+                    
+                    from PIL import Image
+                    frame_image = Image.fromarray(frame_normalized)
+                    
+                    frame_image = frame_image.rotate(-90)
+                    
+                    output_path = cache_images_dir / f"{patient_id}_{view_type}_frame_{frame_idx:03d}.png"
+                    frame_image.save(output_path)
+                    
+                    if view_type == '2CH':
+                        frame_count_2ch += 1
+                    else:
+                        frame_count_4ch += 1
                 
-                from PIL import Image
-                frame_image = Image.fromarray(frame_normalized)
+                patient_count += 1
                 
-                output_path = cache_images_dir / f"{patient_id}_frame_{frame_idx:03d}.png"
-                frame_image.save(output_path)
+                if patient_count % 100 == 0:
+                    print(f"已处理 {patient_count} 个患者, 2CH:{frame_count_2ch} 帧, 4CH:{frame_count_4ch} 帧")
                 
-                frame_count += 1
-            
-            patient_count += 1
-            
-            if patient_count % 100 == 0:
-                print(f"已处理 {patient_count} 个患者, {frame_count} 帧")
-            
-        except Exception as e:
-            failed_patients.append(patient_id)
-            print(f"警告: 处理 {patient_id} 时出错: {e}")
-            continue
+            except Exception as e:
+                failed_patients.append(patient_id)
+                print(f"警告: 处理 {patient_id} 时出错: {e}")
+                continue
     
     if failed_patients:
         print(f"失败的患者数: {len(failed_patients)}")
     
     metadata = {
         'data_hash': get_cache_hash(data_root),
-        'num_frames': frame_count,
+        'num_frames_2ch': frame_count_2ch,
+        'num_frames_4ch': frame_count_4ch,
         'num_patients': patient_count,
         'num_failed': len(failed_patients),
         'failed_patients': failed_patients,
@@ -203,10 +223,11 @@ def generate_cache(data_root: str, force: bool = False) -> bool:
     
     print(f"CAMUS缓存生成完成:")
     print(f"  患者数: {patient_count}")
-    print(f"  2CH帧数: {frame_count}")
+    print(f"  2CH帧数: {frame_count_2ch}")
+    print(f"  4CH帧数: {frame_count_4ch}")
     print(f"  缓存目录: {cache_images_dir}")
     
-    return frame_count > 0
+    return frame_count_2ch > 0 or frame_count_4ch > 0
 
 
 def clear_cache(data_root: str) -> bool:
