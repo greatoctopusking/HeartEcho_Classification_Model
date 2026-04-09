@@ -215,9 +215,9 @@ def generate_cache(data_root: str, force: bool = False) -> bool:
                 if not patient_processed:
                     patient_count += 1
                     patient_processed = True
-                
-                if patient_count % 100 == 0:
-                    print(f"已处理 {patient_count} 个患者, 2CH:{frame_count_2ch} 帧, 4CH:{frame_count_4ch} 帧")
+                    
+                    if patient_count % 100 == 0:
+                        print(f"已处理 {patient_count} 个患者, 2CH:{frame_count_2ch} 帧, 4CH:{frame_count_4ch} 帧")
                 
             except Exception as e:
                 failed_patients.append(patient_id)
