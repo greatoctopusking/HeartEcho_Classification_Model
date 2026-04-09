@@ -1,6 +1,7 @@
 # 数据配置
 data: "CACTUS/Images Dataset"
 camus_data: "CAMUS"
+task_type: "binary"
 num_workers: 4
 
 # 模型配置

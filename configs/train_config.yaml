@@ -1,6 +1,7 @@
 # 数据配置
 cactus_data: "CACTUS/Images Dataset"
 camus_data: "CAMUS"
+task_type: "binary"
 val_split: 0.15
 test_split: 0.15
 holdout_split: 0.1  # 保留比例（不参与训练，用于最终验证模型效果）
