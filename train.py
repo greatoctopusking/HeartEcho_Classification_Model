@@ -552,7 +552,9 @@ def run_kfold_training(args, logger, class_weights, device, train_loader, val_lo
         
         criterion = torch.nn.CrossEntropyLoss(weight=class_weights.to(device), label_smoothing=args.label_smoothing)
         
-        fold_checkpoint_dir = kfold_dir
+        fold_checkpoint_dir = os.path.join(kfold_dir, f'fold_{fold_num}')
+        os.makedirs(fold_checkpoint_dir, exist_ok=True)
+        
         trainer = Trainer(
             model=model, train_loader=train_loader, val_loader=val_loader,
             criterion=criterion, optimizer=optimizer, scheduler=scheduler,
@@ -584,12 +586,14 @@ def run_kfold_training(args, logger, class_weights, device, train_loader, val_lo
     
     logger.info(f"Fold {fold_num}完成! Val Acc: {val_acc:.2f}%")
     print(f"Fold {fold_num}完成! Val Acc: {val_acc:.2f}%")
-    
+
+    # 复制最佳模型到 best.pth (在所有折训练完成后)
     import shutil
     best_model_source = os.path.join(kfold_dir, f'fold_{best_fold}.pth')
     best_model_dest = os.path.join(kfold_dir, 'best.pth')
     if os.path.exists(best_model_source):
         shutil.copy(best_model_source, best_model_dest)
+        print(f"✓ 最佳模型已保存: best.pth")
     
     accs = [r['val_acc'] for r in fold_results]
     mean_acc = np.mean(accs)
@@ -609,6 +613,14 @@ def run_kfold_training(args, logger, class_weights, device, train_loader, val_lo
     print(f"{'='*60}")
     print(f"✓ 最佳模型: fold_{best_fold}.pth (Val Acc: {best_acc:.2f}%)")
     print(f"✓ 已复制到: best.pth")
+    
+    # 复制最佳模型到 best.pth
+    import shutil
+    best_model_source = os.path.join(kfold_dir, f'fold_{best_fold}.pth')
+    best_model_dest = os.path.join(kfold_dir, 'best.pth')
+    if os.path.exists(best_model_source):
+        shutil.copy(best_model_source, best_model_dest)
+        print(f"✓ 最佳模型已保存: best.pth")
     
     logger.info(f"\n{'='*60}")
     logger.info(f"{args.kfold}折交叉验证结果汇总")
