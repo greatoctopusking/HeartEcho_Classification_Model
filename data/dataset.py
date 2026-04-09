@@ -11,7 +11,7 @@ import numpy as np
 from sklearn.model_selection import StratifiedShuffleSplit
 
 from .cactus_loader import get_cactus_data_info, CLASS_NAMES as CACTUS_CLASSES
-from .camus_loader import get_camus_data_info
+from .camus_loader import get_camus_data_info, get_camus_binary_data_info
 
 
 ALL_CLASS_NAMES = ['A4C', 'PL', 'PSAV', 'PSMV', 'Random', 'SC', 'A2C']
@@ -19,6 +19,10 @@ ALL_CLASS_NAMES = ['A4C', 'PL', 'PSAV', 'PSMV', 'Random', 'SC', 'A2C']
 CLASS_TO_IDX = {name: idx for idx, name in enumerate(ALL_CLASS_NAMES)}
 
 IDX_TO_CLASS = {idx: name for idx, name in enumerate(ALL_CLASS_NAMES)}
+
+BINARY_CLASS_NAMES = ['A2C', 'A4C']
+BINARY_CLASS_TO_IDX = {'A2C': 0, 'A4C': 1}
+BINARY_IDX_TO_CLASS = {0: 'A2C', 1: 'A4C'}
 
 
 IMAGENET_MEAN = [0.485, 0.456, 0.406]
@@ -252,7 +256,11 @@ class CardiacDataset(Dataset):
         Returns:
             类别数量的 numpy 数组
         """
-        counts = np.zeros(len(ALL_CLASS_NAMES), dtype=int)
+        unique_labels = set(self.labels)
+        if not unique_labels:
+            return np.zeros(1, dtype=int)
+        num_classes = max(unique_labels) + 1
+        counts = np.zeros(num_classes, dtype=int)
         for label in self.labels:
             counts[label] += 1
         return counts
@@ -269,7 +277,7 @@ class CardiacDataset(Dataset):
         from sklearn.utils.class_weight import compute_class_weight
         
         labels_array = np.array(self.labels)
-        unique_classes = np.arange(len(ALL_CLASS_NAMES))
+        unique_classes = np.unique(labels_array)
         
         class_weights = compute_class_weight(
             class_weight='balanced',
@@ -616,6 +624,231 @@ def create_full_data_loader(
     
     class_counts = full_dataset.get_class_counts()
     class_counts_dict = {ALL_CLASS_NAMES[i]: int(class_counts[i]) for i in range(len(ALL_CLASS_NAMES))}
+    
+    data_loader = DataLoader(
+        full_dataset,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=num_workers,
+        pin_memory=True
+    )
+    
+    return data_loader, class_counts_dict
+
+
+def get_binary_data_loaders(
+    camus_data_root: str,
+    batch_size: int = 32,
+    num_workers: int = 4,
+    val_split: float = 0.15,
+    test_split: float = 0.15,
+    random_seed: int = 42,
+    holdout_split: float = 0.0
+) -> Tuple[DataLoader, DataLoader, DataLoader, Optional[DataLoader]]:
+    """
+    获取二分类任务 (A2C vs A4C) 的数据加载器
+    
+    Args:
+        camus_data_root: CAMUS数据集根目录
+        batch_size: 批大小
+        num_workers: 数据加载线程数
+        val_split: 验证集比例
+        test_split: 测试集比例
+        random_seed: 随机种子
+        holdout_split: 保留测试集比例（用于最终验证，不参与训练）
+    
+    Returns:
+        (train_loader, val_loader, test_loader, holdout_loader)
+    """
+    random.seed(random_seed)
+    np.random.seed(random_seed)
+    
+    image_paths, labels = get_camus_binary_data_info(camus_data_root)
+    
+    if not image_paths:
+        raise ValueError("未能在CAMUS数据集中加载二分类数据 (A2C和A4C)")
+    
+    total_samples = len(image_paths)
+    print(f"二分类数据集总样本数: {total_samples}")
+    
+    all_paths = np.array(image_paths, dtype=object)
+    all_labels = np.array(labels)
+    
+    if holdout_split > 0:
+        holdout_size = int(total_samples * holdout_split)
+        sss = StratifiedShuffleSplit(n_splits=1, test_size=holdout_size, random_state=random_seed)
+        train_val_idx, holdout_idx = next(sss.split(all_paths, all_labels))
+        
+        train_val_paths = all_paths[train_val_idx].tolist()
+        train_val_labels = all_labels[train_val_idx].tolist()
+        holdout_paths = all_paths[holdout_idx].tolist()
+        holdout_labels = all_labels[holdout_idx].tolist()
+        
+        print(f"Hold-out 测试集: {len(holdout_paths)} 样本")
+        
+        train_val_labels = np.array(train_val_labels)
+        test_size = int(len(train_val_paths) * test_split)
+        val_size = int(len(train_val_paths) * val_split)
+        
+        sss = StratifiedShuffleSplit(n_splits=1, test_size=test_size + val_size, random_state=random_seed)
+        train_idx, test_val_idx = next(sss.split(train_val_paths, train_val_labels))
+        
+        train_paths = [train_val_paths[i] for i in train_idx]
+        train_labels = [train_val_labels[i] for i in train_idx]
+        
+        remaining_paths = [train_val_paths[i] for i in test_val_idx]
+        remaining_labels = [train_val_labels[i] for i in test_val_idx]
+        
+        val_size_adjusted = int(len(remaining_paths) * (val_size / (test_size + val_size)))
+        
+        sss_val = StratifiedShuffleSplit(n_splits=1, test_size=val_size_adjusted, random_state=random_seed)
+        val_idx_final, test_idx_final = next(sss_val.split(remaining_paths, remaining_labels))
+        
+        val_paths = [remaining_paths[i] for i in val_idx_final]
+        val_labels = [remaining_labels[i] for i in val_idx_final]
+        test_paths = [remaining_paths[i] for i in test_idx_final]
+        test_labels = [remaining_labels[i] for i in test_idx_final]
+    else:
+        test_size = int(total_samples * test_split)
+        val_size = int(total_samples * val_split)
+        
+        sss = StratifiedShuffleSplit(n_splits=1, test_size=test_size + val_size, random_state=random_seed)
+        train_idx, test_val_idx = next(sss.split(all_paths, all_labels))
+        
+        train_paths = [all_paths[i] for i in train_idx]
+        train_labels = [all_labels[i] for i in train_idx]
+        
+        remaining_paths = [all_paths[i] for i in test_val_idx]
+        remaining_labels = [all_labels[i] for i in test_val_idx]
+        
+        val_size_adjusted = int(len(remaining_paths) * (val_size / (test_size + val_size)))
+        
+        sss_val = StratifiedShuffleSplit(n_splits=1, test_size=val_size_adjusted, random_state=random_seed)
+        val_idx_final, test_idx_final = next(sss_val.split(remaining_paths, remaining_labels))
+        
+        val_paths = [remaining_paths[i] for i in val_idx_final]
+        val_labels = [remaining_labels[i] for i in val_idx_final]
+        test_paths = [remaining_paths[i] for i in test_idx_final]
+        test_labels = [remaining_labels[i] for i in test_idx_final]
+        
+        holdout_paths = []
+        holdout_labels = []
+    
+    train_transform = get_train_transforms()
+    val_transform = get_val_transforms()
+    
+    train_dataset = CardiacDataset(
+        image_paths=train_paths,
+        labels=train_labels,
+        transform=train_transform
+    )
+    
+    val_dataset = CardiacDataset(
+        image_paths=val_paths,
+        labels=val_labels,
+        transform=val_transform
+    )
+    
+    test_dataset = CardiacDataset(
+        image_paths=test_paths,
+        labels=test_labels,
+        transform=val_transform
+    )
+    
+    print(f"数据集划分完成:")
+    print(f"  训练集: {len(train_dataset)} 样本")
+    print(f"  验证集: {len(val_dataset)} 样本")
+    print(f"  测试集: {len(test_dataset)} 样本")
+    
+    print("\n各类别分布:")
+    for dataset, name in [(train_dataset, "训练"), (val_dataset, "验证"), (test_dataset, "测试")]:
+        counts = dataset.get_class_counts()
+        print(f"  {name}集:")
+        for i, class_name in enumerate(BINARY_CLASS_NAMES):
+            print(f"    {class_name}: {counts[i]}")
+    
+    holdout_dataset = None
+    if holdout_paths:
+        holdout_dataset = CardiacDataset(
+            image_paths=holdout_paths,
+            labels=holdout_labels,
+            transform=val_transform
+        )
+        print(f"  Hold-out集: {len(holdout_dataset)} 样本")
+    
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=batch_size,
+        shuffle=True,
+        num_workers=num_workers,
+        pin_memory=True,
+        drop_last=True
+    )
+    
+    val_loader = DataLoader(
+        val_dataset,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=num_workers,
+        pin_memory=True
+    )
+    
+    test_loader = DataLoader(
+        test_dataset,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=num_workers,
+        pin_memory=True
+    )
+    
+    holdout_loader = None
+    if holdout_dataset is not None:
+        holdout_loader = DataLoader(
+            holdout_dataset,
+            batch_size=batch_size,
+            shuffle=False,
+            num_workers=num_workers,
+            pin_memory=True
+        )
+    
+    return train_loader, val_loader, test_loader, holdout_loader
+
+
+def create_binary_full_data_loader(
+    camus_data_root: str,
+    batch_size: int = 32,
+    num_workers: int = 4,
+    img_size: int = 224
+) -> Tuple[DataLoader, Dict]:
+    """
+    创建包含全部二分类数据的DataLoader（无划分），用于评估kfold模型
+    
+    Args:
+        camus_data_root: CAMUS数据集根目录
+        batch_size: 批大小
+        num_workers: 数据加载线程数
+        img_size: 图像尺寸
+    
+    Returns:
+        (data_loader, class_counts_dict)
+    """
+    image_paths, labels = get_camus_binary_data_info(camus_data_root)
+    
+    if not image_paths:
+        raise ValueError("未能在CAMUS数据集中加载二分类数据")
+    
+    total_samples = len(image_paths)
+    print(f"二分类全数据集总样本数: {total_samples}")
+    
+    transform = get_val_transforms(img_size)
+    full_dataset = CardiacDataset(
+        image_paths=image_paths,
+        labels=labels,
+        transform=transform
+    )
+    
+    class_counts = full_dataset.get_class_counts()
+    class_counts_dict = {BINARY_CLASS_NAMES[i]: int(class_counts[i]) for i in range(len(BINARY_CLASS_NAMES))}
     
     data_loader = DataLoader(
         full_dataset,

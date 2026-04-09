@@ -16,6 +16,8 @@
 
 ### 1.3 支持的类别
 
+#### 多分类任务（7类）
+
 | 编号 | 类别 | 英文名称 | 说明 |
 |------|------|----------|------|
 | 0 | A4C | Apical Four-Chamber | 心尖四腔心切面 |
@@ -24,6 +26,16 @@
 | 3 | PSMV | Parasternal Short-axis Mitral Valve | 胸骨旁短轴-二尖瓣切面 |
 | 4 | Random | Random | 随机图像（非标准切面） |
 | 5 | SC | Subcostal | 剑突下四腔心切面 |
+| 6 | A2C | Apical Two-Chamber | 心尖两腔心切面（来自CAMUS） |
+
+#### 二分类任务（A2C vs A4C）
+
+| 编号 | 类别 | 英文名称 | 说明 |
+|------|------|----------|------|
+| 0 | A2C | Apical Two-Chamber | 心尖两腔心切面 |
+| 1 | A4C | Apical Four-Chamber | 心尖四腔心切面 |
+
+> **注意**：二分类任务仅使用 CAMUS 数据集，区分 A2C（心尖两腔心）和 A4C（心尖四腔心）两种切面。
 
 ### 1.4 技术规格
 
@@ -36,7 +48,8 @@
 | Transformer层数 | 12 |
 | 注意力头数 | 12 |
 | Patch Size | 16 × 16 |
-| 分类头 | 全局平均池化 + Linear(768→6) |
+| 分类头 | 全局平均池化 + Linear(768→num_classes) |
+| 支持任务 | 多分类(7类) / 二分类(A2C vs A4C) |
 
 ---
 
@@ -65,7 +78,41 @@ CACTUS/Images Dataset/
 | 总图像数 | 37,726 张 |
 | 类别数 | 6 类 |
 
-### 2.2 数据分布
+### 2.2 CAMUS 数据集
+
+CAMUS 数据集是一个公开的心脏超声心动图分割数据集，包含500名患者的超声序列数据。
+
+**数据集结构：**
+
+```
+CAMUS/
+└── database_nifti/
+    ├── patient0001/
+    │   ├── patient0001_2CH_sequence.nii.gz
+    │   ├── patient0001_2CH_half_sequence.nii.gz
+    │   ├── patient0001_4CH_sequence.nii.gz
+    │   └── patient0001_4CH_half_sequence.nii.gz
+    ├── patient0002/
+    └── ...
+```
+
+| 项目 | 说明 |
+|------|------|
+| 数据格式 | NIfTI (.nii.gz) |
+| 患者数 | 500 名 |
+| 序列类型 | 2CH (两腔心) + 4CH (四腔心) |
+| 每患者帧数 | 约 20 帧 |
+| 总帧数 | 约 10,000 帧 |
+
+**使用说明：**
+- CAMUS 数据主要用于二分类任务（A2C vs A4C）
+- 2CH 序列对应 A2C（心尖两腔心）
+- 4CH 序列对应 A4C（心尖四腔心）
+- 首次使用时会自动生成缓存（`_camus_cache/images/`）
+
+### 2.3 数据分布
+
+#### CACTUS 数据集（多分类任务）
 
 | 类别 | 样本数 | 占比 |
 |------|--------|------|
@@ -76,6 +123,15 @@ CACTUS/Images Dataset/
 | Random | 6,021 | 15.96% |
 | SC | 6,345 | 16.82% |
 | **总计** | **37,726** | **100%** |
+
+#### CAMUS 数据集（二分类任务）
+
+| 类别 | 说明 |
+|------|------|
+| A2C | 心尖两腔心（2CH 序列） |
+| A4C | 心尖四腔心（4CH 序列） |
+
+> 二分类任务的样本数取决于 CAMUS 数据的实际帧数（每个患者约 20 帧 × 500 患者 ≈ 10,000 帧）
 
 ---
 
@@ -96,10 +152,14 @@ USF-MAE Encoder (ViT-Base)
     ↓
 全局平均池化 (Global Average Pooling)
     ↓
-分类头 (Dropout + Linear: 768→6)
+分类头 (Dropout + Linear: 768→num_classes)
     ↓
 Softmax → 类别概率
 ```
+
+其中 `num_classes` 根据任务类型自动调整：
+- 多分类任务：7
+- 二分类任务（A2C vs A4C）：2
 
 ### 3.2 USF-MAE 预训练
 
@@ -223,20 +283,27 @@ transforms.Compose([
 
 | 参数 | 默认值 | 说明 |
 |------|--------|------|
+| `--task_type` | multi_class | 任务类型：multi_class(7类) / binary(二分类) |
+| `--camus_data` | (见下方) | CAMUS数据集路径（二分类任务必需） |
 | `--batch_size` | 32 | 批大小 |
 | `--epochs` | 50 | 训练轮数 |
 | `--lr` | 1e-4 | 学习率 |
 | `--weight_decay` | 0.01 | 权重衰减 |
 | `--val_split` | 0.15 | 验证集比例 |
 | `--test_split` | 0.15 | 测试集比例 |
+| `--kfold` | 0 | K折交叉验证（0=不使用，5=5折） |
+| `--freeze_backbone` | false | 是否冻结 backbone |
 | `--scheduler` | cosine | 学习率调度器 |
 | `--use_amp` | true | 混合精度训练 |
 | `--gradient_clip` | 1.0 | 梯度裁剪阈值 |
 | `--early_stopping_patience` | 10 | 早停耐心值 |
-| `--freeze_backbone` | false | 是否冻结 backbone |
 | `--dropout` | 0.1 | Dropout 概率 |
 
+> **CAMUS 数据集默认路径**：`D:/SRTP_Project__DeepLearning/project/Resources/database_nifti`
+
 ### 5.3 训练命令
+
+#### 多分类任务（7类）
 
 **基本训练：**
 
@@ -271,7 +338,40 @@ python train.py \
 python train.py --config configs/train_config.yaml
 ```
 
+#### 二分类任务（A2C vs A4C）
+
+**基本训练：**
+
+```bash
+python train.py \
+    --task_type binary \
+    --camus_data "D:/SRTP_Project__DeepLearning/project/Resources/database_nifti" \
+    --epochs 50
+```
+
+**使用 K-Fold 交叉验证：**
+
+```bash
+python train.py \
+    --task_type binary \
+    --camus_data "D:/SRTP_Project__DeepLearning/project/Resources/database_nifti" \
+    --kfold 5 \
+    --epochs 30
+```
+
+**冻结 Backbone 训练：**
+
+```bash
+python train.py \
+    --task_type binary \
+    --camus_data "D:/SRTP_Project__DeepLearning/project/Resources/database_nifti" \
+    --freeze_backbone \
+    --lr 1e-3
+```
+
 ### 5.4 输出文件
+
+#### 多分类任务
 
 **模型保存：**
 
@@ -286,6 +386,31 @@ checkpoints/
 
 ```
 logs/{experiment_name}/
+├── training.log         # 训练日志
+├── config.json        # 配置记录
+└── history.json      # 训练历史
+```
+
+#### 二分类任务
+
+**模型保存：**
+
+```
+checkpoints/binary/
+├── best_model.pth           # 最佳模型
+├── last_model.pth           # 最后模型
+└── kfold/                   # K-Fold 交叉验证结果
+    ├── fold_1.pth
+    ├── fold_2.pth
+    ├── fold_5.pth
+    ├── best.pth             # 最佳折模型
+    └── kfold_results.json   # K-Fold 结果汇总
+```
+
+**日志保存：**
+
+```
+logs/binary/{experiment_name}/
 ├── training.log         # 训练日志
 ├── config.json        # 配置记录
 └── history.json      # 训练历史
@@ -322,6 +447,38 @@ python eval.py --checkpoint checkpoints/best_model.pth --test_only
 
 ```bash
 python eval.py --checkpoint checkpoints/kfold/best.pth --full_data --plot_cm --plot_roc
+```
+
+#### 二分类任务（A2C vs A4C）评估
+
+**基本评估：**
+
+```bash
+python eval.py \
+    --task_type binary \
+    --checkpoint checkpoints/binary/best_model.pth \
+    --camus_data "D:/SRTP_Project__DeepLearning/project/Resources/database_nifti"
+```
+
+**生成可视化：**
+
+```bash
+python eval.py \
+    --task_type binary \
+    --checkpoint checkpoints/binary/best_model.pth \
+    --camus_data "D:/SRTP_Project__DeepLearning/project/Resources/database_nifti" \
+    --plot_cm \
+    --plot_roc
+```
+
+**K-Fold 模型评估：**
+
+```bash
+python eval.py \
+    --task_type binary \
+    --checkpoint checkpoints/binary/kfold/best.pth \
+    --camus_data "D:/SRTP_Project__DeepLearning/project/Resources/database_nifti" \
+    --full_data
 ```
 
 ### 6.2 评估指标
@@ -411,6 +568,8 @@ results/
 
 ### 8.1 使用方法
 
+#### 多分类任务
+
 **5 折交叉验证：**
 
 ```bash
@@ -420,10 +579,35 @@ python train.py \
     --epochs 30
 ```
 
+#### 二分类任务
+
+**5 折交叉验证：**
+
+```bash
+python train.py \
+    --task_type binary \
+    --camus_data "D:/SRTP_Project__DeepLearning/project/Resources/database_nifti" \
+    --kfold 5 \
+    --epochs 30
+```
+
 ### 8.2 输出
+
+#### 多分类任务
 
 ```
 checkpoints/kfold/
+├── fold_1.pth          # Fold 1 模型
+├── fold_2.pth          # Fold 2 模型
+├── fold_5.pth          # Fold 5 模型
+├── best.pth             # 最佳模型（验证准确率最高）
+└── kfold_results.json  # 交叉验证结果
+```
+
+#### 二分类任务
+
+```
+checkpoints/binary/kfold/
 ├── fold_1.pth          # Fold 1 模型
 ├── fold_2.pth          # Fold 2 模型
 ├── fold_5.pth          # Fold 5 模型

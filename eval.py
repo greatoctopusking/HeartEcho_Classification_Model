@@ -16,7 +16,7 @@ import torch
 import yaml
 from pathlib import Path
 
-from data import get_data_loaders, create_full_data_loader
+from data import get_data_loaders, create_full_data_loader, get_binary_data_loaders, create_binary_full_data_loader
 from models import load_model_with_pretrained
 from utils import Evaluator, compute_metrics, print_metrics, save_metrics
 
@@ -55,7 +55,7 @@ def parse_args():
     parser.add_argument(
         '--camus_data', 
         type=str, 
-        default='CAMUS',
+        default='D:/SRTP_Project__DeepLearning/project/Resources/database_nifti',
         help='CAMUS数据集路径'
     )
     
@@ -158,6 +158,14 @@ def parse_args():
         help='仅在Holdout集上评估'
     )
     
+    parser.add_argument(
+        '--task_type', 
+        type=str, 
+        default='multi_class',
+        choices=['multi_class', 'binary'],
+        help='任务类型: multi_class(7类) 或 binary(二分类)'
+    )
+    
     return parser.parse_args()
 
 
@@ -197,28 +205,67 @@ def main():
     
     os.makedirs(args.save_dir, exist_ok=True)
     
+    # 根据任务类型调整参数和目录
+    if args.task_type == 'binary':
+        BINARY_CLASS_NAMES = ['A2C', 'A4C']
+        args.num_classes = 2
+        checkpoint_dir = os.path.dirname(args.checkpoint) if args.checkpoint else ''
+        if checkpoint_dir and 'binary' not in checkpoint_dir:
+            args.checkpoint = os.path.join(checkpoint_dir, 'binary', os.path.basename(args.checkpoint))
+        save_dir_base = args.save_dir
+        args.save_dir = os.path.join(save_dir_base, 'binary')
+        os.makedirs(args.save_dir, exist_ok=True)
+        print(f"任务类型: 二分类 (A2C vs A4C)")
+    else:
+        BINARY_CLASS_NAMES = None
+        print(f"任务类型: 多分类 (7类)")
+    
     if args.full_data:
         print("使用全部数据进行评估...")
-        data_loader, class_counts = create_full_data_loader(
-            cactus_data_root=args.data,
-            camus_data_root=args.camus_data if os.path.exists(args.camus_data) else None,
-            batch_size=args.batch_size,
-            num_workers=args.num_workers
-        )
+        if args.task_type == 'binary':
+            from data import create_binary_full_data_loader
+            data_loader, class_counts = create_binary_full_data_loader(
+                camus_data_root=args.camus_data,
+                batch_size=args.batch_size,
+                num_workers=args.num_workers
+            )
+            class_names = BINARY_CLASS_NAMES
+        else:
+            data_loader, class_counts = create_full_data_loader(
+                cactus_data_root=args.data,
+                camus_data_root=args.camus_data if os.path.exists(args.camus_data) else None,
+                batch_size=args.batch_size,
+                num_workers=args.num_workers
+            )
+            class_names = CLASS_NAMES
         print(f"全数据集样本数: {len(data_loader.dataset)}")
         print(f"类别分布: {class_counts}")
     else:
         print("加载数据集...")
-        train_loader, val_loader, test_loader, holdout_loader = get_data_loaders(
-            cactus_data_root=args.data,
-            camus_data_root=args.camus_data if os.path.exists(args.camus_data) else None,
-            batch_size=args.batch_size,
-            num_workers=args.num_workers,
-            val_split=args.val_split,
-            test_split=args.test_split,
-            random_seed=42,
-            holdout_split=args.holdout_split
-        )
+        if args.task_type == 'binary':
+            from data import get_binary_data_loaders
+            train_loader, val_loader, test_loader, holdout_loader = get_binary_data_loaders(
+                camus_data_root=args.camus_data,
+                batch_size=args.batch_size,
+                num_workers=args.num_workers,
+                val_split=args.val_split,
+                test_split=args.test_split,
+                random_seed=42,
+                holdout_split=args.holdout_split
+            )
+            class_names = BINARY_CLASS_NAMES
+        else:
+            train_loader, val_loader, test_loader, holdout_loader = get_data_loaders(
+                cactus_data_root=args.data,
+                camus_data_root=args.camus_data if os.path.exists(args.camus_data) else None,
+                batch_size=args.batch_size,
+                num_workers=args.num_workers,
+                val_split=args.val_split,
+                test_split=args.test_split,
+                random_seed=42,
+                holdout_split=args.holdout_split
+            )
+            class_names = CLASS_NAMES
         
         print(f"数据集加载完成:")
         print(f"  训练集: {len(train_loader.dataset)} 样本")
@@ -252,7 +299,7 @@ def main():
     evaluator = Evaluator(
         model=model,
         device=device,
-        class_names=CLASS_NAMES
+        class_names=class_names
     )
     
     if args.full_data:

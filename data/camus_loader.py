@@ -12,7 +12,14 @@ CLASS_IDX_2CH = 6
 CLASS_NAME_4CH = 'A4C'
 CLASS_IDX_4CH = 0
 
-__all__ = ['CLASS_NAME_2CH', 'CLASS_IDX_2CH', 'CLASS_NAME_4CH', 'CLASS_IDX_4CH']
+BINARY_CLASS_NAMES = ['A2C', 'A4C']
+BINARY_CLASS_TO_IDX = {'A2C': 0, 'A4C': 1}
+BINARY_IDX_TO_CLASS = {0: 'A2C', 1: 'A4C'}
+
+__all__ = ['CLASS_NAME_2CH', 'CLASS_IDX_2CH', 'CLASS_NAME_4CH', 'CLASS_IDX_4CH', 
+           'BINARY_CLASS_NAMES', 'BINARY_CLASS_TO_IDX', 'BINARY_IDX_TO_CLASS',
+           'get_camus_data_info', 'get_camus_binary_data_info', 'clear_cache',
+           'get_cache_status', 'verify_camus_data', 'get_camus_statistics']
 
 CACHE_DIR_NAME = "_camus_cache"
 CACHE_METADATA_FILE = "cache_metadata.json"
@@ -571,6 +578,179 @@ def verify_camus_data(data_root: str) -> bool:
         print("期望目录结构: database_nifti/patient0001/...")
     
     return exists
+
+
+def get_camus_binary_data_info(
+    data_root: str, 
+    use_cache: bool = True,
+    force_cache: bool = False
+) -> Tuple[List[str], List[int]]:
+    """
+    获取CAMUS数据集的二分类数据 (A2C vs A4C)
+    
+    Args:
+        data_root: CAMUS数据集根目录
+        use_cache: 是否使用缓存（默认启用）
+        force_cache: 是否强制重新生成缓存
+    
+    Returns:
+        image_paths: 图像文件路径列表
+        labels: 对应的标签索引列表 (A2C=0, A4C=1)
+    """
+    data_path = Path(data_root)
+    
+    if not data_path.exists():
+        print(f"警告: CAMUS数据集目录不存在 - {data_path}")
+        return [], []
+    
+    if use_cache:
+        if force_cache:
+            print("强制重新生成缓存...")
+            if generate_cache(data_root, force=True):
+                return load_camus_binary_from_cache(data_root)
+            return [], []
+        
+        if check_cache_valid(data_root):
+            print("从缓存加载CAMUS二分类数据...")
+            return load_camus_binary_from_cache(data_root)
+        
+        print("缓存无效或不存在，正在生成缓存...")
+        if generate_cache(data_root):
+            return load_camus_binary_from_cache(data_root)
+        return [], []
+    
+    return extract_camus_binary_frames(data_root)
+
+
+def load_camus_binary_from_cache(data_root: str) -> Tuple[List[str], List[int]]:
+    """
+    从缓存加载CAMUS二分类数据
+    
+    Args:
+        data_root: CAMUS数据集根目录
+    
+    Returns:
+        (image_paths, labels) - A2C=0, A4C=1
+    """
+    cache_dir = get_cache_dir(data_root)
+    cache_images_dir = cache_dir / "images"
+    
+    image_paths = []
+    labels = []
+    
+    for img_file in sorted(cache_images_dir.glob("*.png")):
+        filename = img_file.name
+        if '_2CH_' in filename:
+            labels.append(BINARY_CLASS_TO_IDX['A2C'])  # 0
+        elif '_4CH_' in filename:
+            labels.append(BINARY_CLASS_TO_IDX['A4C'])  # 1
+        else:
+            continue
+        image_paths.append(str(img_file))
+    
+    return image_paths, labels
+
+
+def extract_camus_binary_frames(data_root: str) -> Tuple[List[str], List[int]]:
+    """
+    直接从NIfTI提取二分类帧
+    
+    Args:
+        data_root: CAMUS数据集根目录
+    
+    Returns:
+        (image_paths, labels) - A2C=0, A4C=1
+    """
+    try:
+        import nibabel as nib
+    except ImportError:
+        print("错误: 需要安装 nibabel 库来读取 NIfTI 文件")
+        print("请运行: pip install nibabel")
+        return [], []
+    
+    image_paths = []
+    labels = []
+    
+    data_path = Path(data_root)
+    patient_dirs = sorted(data_path.glob("patient*"))
+    
+    print(f"找到 {len(patient_dirs)} 个患者目录")
+    print("警告: 每次运行都会重新提取帧，建议使用缓存")
+    
+    frame_count_2ch = 0
+    frame_count_4ch = 0
+    patient_count = 0
+    
+    for patient_dir in patient_dirs:
+        if not patient_dir.is_dir():
+            continue
+        
+        patient_id = patient_dir.name
+        
+        half_sequence_2ch = patient_dir / f"{patient_id}_2CH_half_sequence.nii.gz"
+        half_sequence_4ch = patient_dir / f"{patient_id}_4CH_half_sequence.nii.gz"
+        
+        has_2ch = half_sequence_2ch.exists()
+        has_4ch = half_sequence_4ch.exists()
+        
+        if not has_2ch and not has_4ch:
+            continue
+        
+        patient_processed = False
+        
+        for view_type in ['2CH', '4CH']:
+            half_sequence_file = patient_dir / f"{patient_id}_{view_type}_half_sequence.nii.gz"
+            
+            if not half_sequence_file.exists():
+                continue
+            
+            try:
+                img = nib.load(str(half_sequence_file))
+                data = img.get_fdata()
+                
+                if len(data.shape) == 3:
+                    num_frames = data.shape[2]
+                elif len(data.shape) == 4:
+                    num_frames = data.shape[3]
+                else:
+                    continue
+                
+                for frame_idx in range(num_frames):
+                    if len(data.shape) == 3:
+                        frame = data[:, :, frame_idx]
+                    else:
+                        frame = data[:, :, 0, frame_idx]
+                    
+                    frame_normalized = ((frame - frame.min()) / (frame.max() - frame.min() + 1e-8) * 255).astype(np.uint8)
+                    
+                    from PIL import Image
+                    frame_image = Image.fromarray(frame_normalized)
+                    
+                    output_path = data_path / f"_temp_{patient_id}_{view_type}_frame_{frame_idx:03d}.png"
+                    frame_image.save(output_path)
+                    
+                    image_paths.append(str(output_path))
+                    if view_type == '2CH':
+                        labels.append(BINARY_CLASS_TO_IDX['A2C'])  # 0
+                        frame_count_2ch += 1
+                    else:
+                        labels.append(BINARY_CLASS_TO_IDX['A4C'])  # 1
+                        frame_count_4ch += 1
+                
+                if not patient_processed:
+                    patient_count += 1
+                    patient_processed = True
+                
+            except Exception as e:
+                print(f"警告: 处理 {patient_id} 时出错: {e}")
+                continue
+    
+    print(f"CAMUS二分类数据集加载完成:")
+    print(f"  患者数: {patient_count}")
+    print(f"  A2C帧数: {frame_count_2ch}")
+    print(f"  A4C帧数: {frame_count_4ch}")
+    
+    return image_paths, labels
 
 
 def download_camus_instructions() -> str:

@@ -50,8 +50,8 @@ def parse_args():
     parser.add_argument(
         '--camus_data', 
         type=str, 
-        default='CAMUS',
-        help='CAMUS数据集路径 (可选)'
+        default='D:/SRTP_Project__DeepLearning/project/Resources/database_nifti',
+        help='CAMUS数据集路径 (二分类任务必需)'
     )
     
     parser.add_argument(
@@ -249,6 +249,14 @@ def parse_args():
         help='保留测试集比例（用于最终验证，不参与训练）'
     )
     
+    parser.add_argument(
+        '--task_type', 
+        type=str, 
+        default='multi_class',
+        choices=['multi_class', 'binary'],
+        help='任务类型: multi_class(7类) 或 binary(二分类 A2C vs A4C)'
+    )
+    
     return parser.parse_args()
 
 
@@ -332,42 +340,83 @@ def main():
     
     logger.log_config(vars(args))
     
+    # 根据任务类型调整checkpoint目录和类别
+    if args.task_type == 'binary':
+        BINARY_CLASS_NAMES = ['A2C', 'A4C']
+        args.num_classes = 2
+        checkpoint_dir_base = args.checkpoint_dir
+        args.checkpoint_dir = os.path.join(checkpoint_dir_base, 'binary')
+        log_dir_base = args.log_dir
+        args.log_dir = os.path.join(log_dir_base, 'binary')
+        if args.experiment_name is None:
+            args.experiment_name = 'binary_classifier'
+        print(f"\n任务类型: 二分类 (A2C vs A4C)")
+        print(f"结果目录: {args.checkpoint_dir}")
+    else:
+        BINARY_CLASS_NAMES = None
+        print(f"\n任务类型: 多分类 (7类)")
+    
     print("\n验证数据集...")
     from data.cactus_loader import verify_cactus_data
     from data.camus_loader import verify_camus_data
     
-    cactus_valid = verify_cactus_data(args.cactus_data)
-    if not cactus_valid:
-        logger.error("CACTUS 数据集验证失败，请检查数据路径")
-        return
-    
-    camus_valid = True
-    if args.camus_data and os.path.exists(args.camus_data):
+    if args.task_type == 'binary':
+        if not os.path.exists(args.camus_data):
+            logger.error(f"CAMUS 数据集不存在: {args.camus_data}")
+            return
         camus_valid = verify_camus_data(args.camus_data)
         if not camus_valid:
             logger.error("CAMUS 数据集验证失败，请检查数据路径")
             return
+        logger.info("CAMUS 数据集验证通过")
     else:
-        logger.info("未找到 CAMUS 数据集，将仅使用 CACTUS 数据 (6类)")
-        args.camus_data = None
-    
-    logger.info("数据集验证通过")
+        cactus_valid = verify_cactus_data(args.cactus_data)
+        if not cactus_valid:
+            logger.error("CACTUS 数据集验证失败，请检查数据路径")
+            return
+        
+        camus_valid = True
+        if args.camus_data and os.path.exists(args.camus_data):
+            camus_valid = verify_camus_data(args.camus_data)
+            if not camus_valid:
+                logger.error("CAMUS 数据集验证失败，请检查数据路径")
+                return
+        else:
+            logger.info("未找到 CAMUS 数据集，将仅使用 CACTUS 数据 (6类)")
+            args.camus_data = None
+        
+        logger.info("数据集验证通过")
     
     if args.no_kfold:
         args.kfold = 0
     
     print("\n加载数据集...")
     try:
-        train_loader, val_loader, test_loader, holdout_loader = get_data_loaders(
-            cactus_data_root=args.cactus_data,
-            camus_data_root=args.camus_data if os.path.exists(args.camus_data) else None,
-            batch_size=args.batch_size,
-            num_workers=args.num_workers,
-            val_split=args.val_split,
-            test_split=args.test_split,
-            random_seed=args.seed,
-            holdout_split=args.holdout_split
-        )
+        if args.task_type == 'binary':
+            from data import get_binary_data_loaders
+            train_loader, val_loader, test_loader, holdout_loader = get_binary_data_loaders(
+                camus_data_root=args.camus_data,
+                batch_size=args.batch_size,
+                num_workers=args.num_workers,
+                val_split=args.val_split,
+                test_split=args.test_split,
+                random_seed=args.seed,
+                holdout_split=args.holdout_split
+            )
+            class_names = BINARY_CLASS_NAMES
+        else:
+            from data import get_data_loaders
+            train_loader, val_loader, test_loader, holdout_loader = get_data_loaders(
+                cactus_data_root=args.cactus_data,
+                camus_data_root=args.camus_data if os.path.exists(args.camus_data) else None,
+                batch_size=args.batch_size,
+                num_workers=args.num_workers,
+                val_split=args.val_split,
+                test_split=args.test_split,
+                random_seed=args.seed,
+                holdout_split=args.holdout_split
+            )
+            class_names = CLASS_NAMES
         
         class_weights = train_loader.dataset.get_class_weights()
         logger.info(f"\n类别权重: {class_weights.numpy()}")
@@ -378,7 +427,7 @@ def main():
             'test_samples': len(test_loader.dataset),
             'holdout_samples': len(holdout_loader.dataset) if holdout_loader else 0,
             'num_classes': args.num_classes,
-            'class_names': CLASS_NAMES
+            'class_names': class_names
         }
         logger.log_dataset_info(data_info)
         
@@ -398,7 +447,7 @@ def main():
         logger.info(f"  训练模式: 简单划分")
     
     if args.kfold > 0:
-        run_kfold_training(args, logger, class_weights, device, train_loader, val_loader, data_info)
+        run_kfold_training(args, logger, class_weights, device, train_loader, val_loader, data_info, class_names)
     else:
         run_simple_training(args, logger, class_weights, device, train_loader, val_loader, test_loader, holdout_loader)
     
@@ -463,13 +512,11 @@ def run_simple_training(args, logger, class_weights, device, train_loader, val_l
         logger.info(f"Holdout集准确率: {holdout_acc:.2f}%")
 
 
-def run_kfold_training(args, logger, class_weights, device, train_loader, val_loader, data_info, holdout_loader=None):
+def run_kfold_training(args, logger, class_weights, device, train_loader, val_loader, data_info, class_names, holdout_loader=None):
     """K折交叉验证训练"""
     import json
     from sklearn.model_selection import KFold, StratifiedKFold
     from data.dataset import CardiacDataset, get_train_transforms, get_val_transforms
-    from data.cactus_loader import get_cactus_data_info
-    from data.camus_loader import get_camus_data_info
     from models import load_model_with_pretrained, create_usfmae_backbone, CardiacClassifier
     from utils import create_optimizer, create_scheduler
     
@@ -478,14 +525,22 @@ def run_kfold_training(args, logger, class_weights, device, train_loader, val_lo
     all_paths = []
     all_labels = []
     
-    cactus_paths, cactus_labels = get_cactus_data_info(args.cactus_data)
-    all_paths.extend(cactus_paths)
-    all_labels.extend(cactus_labels)
-    
-    if args.camus_data and os.path.exists(args.camus_data):
-        camus_paths, camus_labels = get_camus_data_info(args.camus_data)
+    if args.task_type == 'binary':
+        from data.camus_loader import get_camus_binary_data_info
+        camus_paths, camus_labels = get_camus_binary_data_info(args.camus_data)
         all_paths.extend(camus_paths)
         all_labels.extend(camus_labels)
+    else:
+        from data.cactus_loader import get_cactus_data_info
+        from data.camus_loader import get_camus_data_info
+        cactus_paths, cactus_labels = get_cactus_data_info(args.cactus_data)
+        all_paths.extend(cactus_paths)
+        all_labels.extend(cactus_labels)
+        
+        if args.camus_data and os.path.exists(args.camus_data):
+            camus_paths, camus_labels = get_camus_data_info(args.camus_data)
+            all_paths.extend(camus_paths)
+            all_labels.extend(camus_labels)
     
     all_labels = np.array(all_labels)
     n_samples = len(all_paths)
