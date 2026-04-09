@@ -436,7 +436,7 @@ def extract_camus_frames(data_root: str) -> Tuple[List[str], List[int]]:
                 frame_image.save(output_path)
                 
                 image_paths.append(str(output_path))
-                labels.append(CLASS_IDX)
+                labels.append(CLASS_IDX_2CH)
                 frame_count += 1
             
             patient_count += 1
@@ -448,7 +448,7 @@ def extract_camus_frames(data_root: str) -> Tuple[List[str], List[int]]:
     print(f"CAMUS数据集加载完成:")
     print(f"  患者数: {patient_count}")
     print(f"  2CH帧数: {frame_count}")
-    print(f"  类别: A2C (索引: {CLASS_IDX})")
+    print(f"  类别: A2C (索引: {CLASS_IDX_2CH})")
     
     return image_paths, labels
 
