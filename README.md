@@ -631,22 +631,47 @@ python eval.py \
 
 ### 9.1 命令行推理
 
+#### 多分类推理（7类）
+
 ```bash
 python -m inference \
     --checkpoint checkpoints/best_model.pth \
-    --image path/to/image.jpg
+    --input path/to/image.jpg
+```
+
+#### 二分类推理（A2C vs A4C）
+
+```bash
+python -m inference \
+    --checkpoint checkpoints/binary/best_model.pth \
+    --task_type binary \
+    --input path/to/image.jpg
 ```
 
 ### 9.2 Python API
 
 ```python
 import torch
-from inference.classifier import CardiacViewClassifier
+from inference.predict import load_model, predict_single
+from inference.transforms import get_val_transforms
+from inference.constants import get_class_names
 
-model = CardiacViewClassifier.load('checkpoints/best_model.pth')
-predictions = model.predict('path/to/image.jpg')
-print(predictions)
+# 多分类推理
+model = load_model('checkpoints/best_model.pth', num_classes=7, device='cuda')
+transform = get_val_transforms(224)
+result = predict_single(model, 'path/to/image.jpg', transform=transform, device='cuda')
+print(result['predicted_class'])
+
+# 二分类推理
+model = load_model('checkpoints/binary/best_model.pth', num_classes=2, device='cuda')
+class_names = get_class_names('binary')  # ['A2C', 'A4C']
+result = predict_single(model, 'path/to/image.jpg', transform=transform, device='cuda', class_names=class_names)
+print(result['predicted_class'])
 ```
+
+### 9.3 推理模块详情
+
+详细使用说明请参考 [inference/INFERENCE.md](inference/INFERENCE.md)
 
 ---
 
