@@ -658,12 +658,12 @@ from inference.constants import get_class_names
 # 多分类推理
 model = load_model('checkpoints/best_model.pth', task_type='multi_class', device='cuda')
 transform = get_val_transforms(224)
-result = predict_single(model, 'path/to/image.jpg', transform=transform, device='cuda')
+result = predict_single(model, 'path/to/image.jpg', transform=transform, device='cuda', preprocessing_mode='auto')
 print(result['predicted_class'])
 
 # 二分类推理
 model = load_model('checkpoints/binary/best_model.pth', task_type='binary', device='cuda')
-result = predict_single(model, 'path/to/image.jpg', transform=transform, device='cuda')
+result = predict_single(model, 'path/to/image.jpg', transform=transform, device='cuda', preprocessing_mode='auto')
 print(result['predicted_class'])  # 自动使用 A2C/A4C 类别名称
 ```
 

@@ -8,7 +8,7 @@ from pathlib import Path
 
 from .classifier import CardiacClassifier, load_model
 from .transforms import get_val_transforms, preprocess_image, is_supported_image
-from .constants import ALL_CLASS_NAMES, NUM_CLASSES, DEFAULT_IMAGE_SIZE, get_class_names
+from .constants import ALL_CLASS_NAMES, NUM_CLASSES, DEFAULT_IMAGE_SIZE, get_class_names, BINARY_CLASS_NAMES
 
 
 def predict_single(
@@ -34,9 +34,6 @@ def predict_single(
     if transform is None:
         transform = get_val_transforms()
     
-    if class_names is None:
-        class_names = ALL_CLASS_NAMES
-    
     tensor = preprocess_image(image_path, transform)
     tensor = tensor.to(device)
     
@@ -45,6 +42,14 @@ def predict_single(
         probs = torch.softmax(output, dim=1)
         pred_idx = probs.argmax(dim=1).item()
         confidence = probs[0, pred_idx].item()
+        
+        # 自动推断 class_names（如果未指定）
+        if class_names is None:
+            actual_num_classes = output.shape[1]
+            if actual_num_classes == 2:
+                class_names = BINARY_CLASS_NAMES
+            else:
+                class_names = ALL_CLASS_NAMES
     
     prob_dict = {
         class_names[i]: round(probs[0, i].item(), 4)
@@ -87,11 +92,21 @@ def predict_batch(
     if transform is None:
         transform = get_val_transforms()
     
-    if class_names is None:
-        class_names = ALL_CLASS_NAMES
-    
     results = []
     total = len(image_paths)
+    
+    # 获取第一个batch的输出来确定类别数
+    sample_tensor = None
+    if image_paths:
+        sample_tensor = preprocess_image(image_paths[0], transform).unsqueeze(0).to(device)
+        with torch.no_grad():
+            sample_output = model(sample_tensor)
+            actual_num_classes = sample_output.shape[1]
+            if class_names is None:
+                if actual_num_classes == 2:
+                    class_names = BINARY_CLASS_NAMES
+                else:
+                    class_names = ALL_CLASS_NAMES
     
     for i in range(0, total, batch_size):
         batch_paths = image_paths[i:i + batch_size]

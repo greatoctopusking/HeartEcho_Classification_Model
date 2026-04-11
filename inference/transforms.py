@@ -2,7 +2,7 @@
 import torch
 from torchvision import transforms
 from PIL import Image
-from typing import Union
+from typing import Union, Optional
 import numpy as np
 
 try:
@@ -31,6 +31,32 @@ def get_val_transforms(image_size: int = DEFAULT_IMAGE_SIZE) -> transforms.Compo
     ])
 
 
+def resize_with_padding(img: Image.Image, target_size: int = 224) -> Image.Image:
+    """
+    保持宽高比的resize + 中心padding
+    
+    Args:
+        img: 输入的 PIL Image
+        target_size: 目标尺寸
+        
+    Returns:
+        处理后的 PIL Image
+    """
+    img = img.convert('L')
+    orig_w, orig_h = img.size
+    aspect_ratio = orig_w / orig_h
+    
+    new_w = target_size
+    new_h = int(new_w / aspect_ratio)
+    img = img.resize((new_w, new_h), Image.LANCZOS)
+    
+    result = Image.new('L', (target_size, target_size), 0)
+    paste_y = (target_size - new_h) // 2
+    result.paste(img, (0, paste_y))
+    
+    return result.convert('RGB')
+
+
 def load_image(image_path: str) -> Image.Image:
     """
     加载图像并转换为RGB
@@ -47,8 +73,9 @@ def load_image(image_path: str) -> Image.Image:
         return load_nifti_image(image_path)
     
     img = Image.open(image_path)
-    if img.mode != 'RGB':
-        img = img.convert('RGB')
+    img = resize_with_padding(img, 224)
+    img = img.rotate(90)
+    
     return img
 
 
@@ -85,7 +112,10 @@ def load_nifti_image(file_path: str) -> Image.Image:
     data = data.astype(np.uint8)
     
     pil_img = Image.fromarray(data, mode='L')
-    return pil_img.convert('RGB')
+    pil_img = resize_with_padding(pil_img, 224)
+    pil_img = pil_img.rotate(90)
+    
+    return pil_img
 
 
 def preprocess_image(

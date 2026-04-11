@@ -100,6 +100,8 @@ inference/
 | multi_class | 7 | A4C, PL, PSAV, PSMV, Random, SC, A2C |
 | binary | 2 | A2C, A4C |
 
+> **注意**：推理模块默认使用与训练一致的图像预处理（灰度+保持宽高比+旋转补偿），无需额外配置。
+
 ---
 
 ## 4 使用示例
@@ -301,7 +303,8 @@ result = predict_from_path(
     checkpoint_path='checkpoints/best_model.pth',
     image_path='path/to/image.jpg',
     task_type='multi_class',
-    device='cuda'
+    device='cuda',
+    preprocessing_mode='auto'
 )
 
 # 二分类
@@ -309,7 +312,8 @@ result = predict_from_path(
     checkpoint_path='checkpoints/binary/best_model.pth',
     image_path='path/to/image.jpg',
     task_type='binary',
-    device='cuda'
+    device='cuda',
+    preprocessing_mode='auto'
 )
 ```
 

@@ -153,6 +153,7 @@ def main():
     
     print(f"Using device: {args.device}")
     print(f"Task type: {args.task_type} ({args.num_classes} classes)")
+    print(f"Preprocessing mode: {args.preprocessing_mode}")
     print(f"Loading model from {args.checkpoint}...")
     
     transform = get_val_transforms(args.image_size)
