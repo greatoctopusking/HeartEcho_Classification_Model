@@ -651,22 +651,20 @@ python -m inference \
 ### 9.2 Python API
 
 ```python
-import torch
 from inference.predict import load_model, predict_single
 from inference.transforms import get_val_transforms
 from inference.constants import get_class_names
 
 # 多分类推理
-model = load_model('checkpoints/best_model.pth', num_classes=7, device='cuda')
+model = load_model('checkpoints/best_model.pth', task_type='multi_class', device='cuda')
 transform = get_val_transforms(224)
 result = predict_single(model, 'path/to/image.jpg', transform=transform, device='cuda')
 print(result['predicted_class'])
 
 # 二分类推理
-model = load_model('checkpoints/binary/best_model.pth', num_classes=2, device='cuda')
-class_names = get_class_names('binary')  # ['A2C', 'A4C']
-result = predict_single(model, 'path/to/image.jpg', transform=transform, device='cuda', class_names=class_names)
-print(result['predicted_class'])
+model = load_model('checkpoints/binary/best_model.pth', task_type='binary', device='cuda')
+result = predict_single(model, 'path/to/image.jpg', transform=transform, device='cuda')
+print(result['predicted_class'])  # 自动使用 A2C/A4C 类别名称
 ```
 
 ### 9.3 推理模块详情

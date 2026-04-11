@@ -224,9 +224,9 @@ def predict_directory(
 def predict_from_path(
     checkpoint_path: str,
     image_path: str,
-    num_classes: int = NUM_CLASSES,
-    device: str = 'cuda',
-    task_type: str = 'multi_class'
+    task_type: str = 'multi_class',
+    num_classes: Optional[int] = None,
+    device: str = 'cuda'
 ) -> Dict:
     """
     一键推理 - 从图像路径直接得到结果
@@ -234,9 +234,9 @@ def predict_from_path(
     Args:
         checkpoint_path: 模型权重路径
         image_path: 图像路径
-        num_classes: 分类类别数
-        device: 推理设备
         task_type: 任务类型 'multi_class' 或 'binary'
+        num_classes: 分类类别数（可选，如果指定则覆盖 task_type 的默认值）
+        device: 推理设备
         
     Returns:
         预测结果字典
@@ -244,7 +244,7 @@ def predict_from_path(
     class_names = get_class_names(task_type)
     
     print(f"Loading model from {checkpoint_path}...")
-    model = load_model(checkpoint_path, num_classes=num_classes, device=device)
+    model = load_model(checkpoint_path, task_type=task_type, num_classes=num_classes, device=device)
     
     print(f"Predicting {image_path}...")
     result = predict_single(model, image_path, device=device, class_names=class_names)

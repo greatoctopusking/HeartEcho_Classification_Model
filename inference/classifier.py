@@ -72,7 +72,8 @@ class CardiacClassifier(nn.Module):
 
 def load_model(
     checkpoint_path: str,
-    num_classes: int = 7,
+    task_type: str = 'multi_class',
+    num_classes: Optional[int] = None,
     freeze_backbone: bool = False,
     device: str = 'cuda'
 ) -> CardiacClassifier:
@@ -81,13 +82,18 @@ def load_model(
     
     Args:
         checkpoint_path: 模型权重文件路径
-        num_classes: 分类类别数
+        task_type: 任务类型 'multi_class' 或 'binary'，自动确定 num_classes
+        num_classes: 分类类别数（可选，如果指定则覆盖 task_type 的默认值）
         freeze_backbone: 是否冻结 backbone
         device: 设备
         
     Returns:
         加载好的 CardiacClassifier 模型
     """
+    # 根据 task_type 自动确定 num_classes
+    if num_classes is None:
+        num_classes = 2 if task_type == 'binary' else 7
+    
     backbone = create_usfmae_backbone(
         pretrained_path=None,
         freeze=freeze_backbone,

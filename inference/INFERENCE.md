@@ -211,14 +211,13 @@ python -m inference --config inference_config.yaml
 ### 5.1 多分类推理（7类）
 
 ```python
-import torch
 from inference.predict import load_model, predict_single
 from inference.transforms import get_val_transforms
 
-# 加载模型
+# 加载模型（自动识别7类）
 model = load_model(
     'checkpoints/best_model.pth',
-    num_classes=7,
+    task_type='multi_class',
     device='cuda'
 )
 
@@ -242,26 +241,23 @@ print(result['confidence'])
 ```python
 from inference.predict import load_model, predict_single
 from inference.transforms import get_val_transforms
-from inference.constants import get_class_names
 
-# 加载模型（二分类）
+# 加载模型（自动识别2类）
 model = load_model(
     'checkpoints/binary/best_model.pth',
-    num_classes=2,
+    task_type='binary',
     device='cuda'
 )
 
-# 获取预处理和二分类类别名称
+# 获取预处理
 transform = get_val_transforms(224)
-class_names = get_class_names('binary')  # ['A2C', 'A4C']
 
-# 推理单张图像
+# 推理单张图像（自动使用 A2C/A4C 类别名称）
 result = predict_single(
     model,
     'path/to/image.jpg',
     transform=transform,
-    device='cuda',
-    class_names=class_names
+    device='cuda'
 )
 
 print(result['predicted_class'])  # 'A2C' 或 'A4C'
@@ -272,7 +268,6 @@ print(result['confidence'])
 
 ```python
 from inference.predict import predict_directory
-from inference.constants import get_class_names
 
 # 多分类批量推理
 output = predict_directory(
@@ -284,14 +279,13 @@ output = predict_directory(
 
 print(output['class_distribution'])
 
-# 二分类批量推理
-class_names = get_class_names('binary')
+# 二分类批量推理（自动使用对应类别名称）
+model = load_model('checkpoints/binary/best_model.pth', task_type='binary', device='cuda')
 output = predict_directory(
     model,
     'path/to/image_dir/',
     output_path='binary_results.json',
-    recursive=True,
-    class_names=class_names
+    recursive=True
 )
 
 print(output['class_distribution'])
@@ -306,18 +300,16 @@ from inference.predict import predict_from_path
 result = predict_from_path(
     checkpoint_path='checkpoints/best_model.pth',
     image_path='path/to/image.jpg',
-    num_classes=7,
-    device='cuda',
-    task_type='multi_class'
+    task_type='multi_class',
+    device='cuda'
 )
 
 # 二分类
 result = predict_from_path(
     checkpoint_path='checkpoints/binary/best_model.pth',
     image_path='path/to/image.jpg',
-    num_classes=2,
-    device='cuda',
-    task_type='binary'
+    task_type='binary',
+    device='cuda'
 )
 ```
 
